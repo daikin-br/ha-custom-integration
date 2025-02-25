@@ -1,6 +1,5 @@
 {
     "config": {
-      "title": "Daikin Smart AC",
       "flow_title": "Dispositivo Detectado: {name}",
       "step": {
         "user": {
@@ -10,10 +9,6 @@
             "device_name": "Nome do Dispositivo",
             "api_key": "Chave do Dispositivo",
             "poll_interval": "Intervalo de Atualização (segundos)"
-          },
-          "errors": {
-            "required": "Este campo é obrigatório.",
-            "invalid_key": "Chave inválida, por favor verifique novamente."
           }
         },
         "reconfigure": {
@@ -64,9 +59,10 @@
                 "eco": "Econo",
                 "boost": "Potente"
               }
-            }
+            }  
           }
         }
       }
     }
-  }
+}
+  

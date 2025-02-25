@@ -1,6 +1,5 @@
-{
+{  
     "config": {
-        "title": "Daikin Smart AC",
         "flow_title": "Discovered Device: {name}",
         "step": {
             "user": {
@@ -10,10 +9,6 @@
                     "device_name": "Device Name",
                     "api_key": "Device Key",
                     "poll_interval": "Poll Interval (seconds)"
-                },
-                "errors": {
-                    "required": "This field is required.",
-                    "invalid_key": "Invalid key, please check again."
                 }
             },
             "reconfigure": {
@@ -64,7 +59,7 @@
                             "eco": "Econo",
                             "boost": "Power Chill"
                         }
-                    }
+                    } 
                 }
             }
         }
