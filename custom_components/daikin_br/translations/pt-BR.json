@@ -1,68 +1,67 @@
 {
-    "config": {
-      "flow_title": "Dispositivo Detectado: {name}",
-      "step": {
-        "user": {
-          "title": "Configurar Daikin Smart AC",
-          "description": "Digite o Nome do Dispositivo e a Chave do Dispositivo para o SSID: {hostname}.\n\nObservação – Para encontrar a Chave do Dispositivo para o SSID exibido acima, abra o aplicativo móvel Daikin Smart AC e navegue até Menu → Integrations → Home Assistant. Digite o SSID e pressione Enviar.",
-          "data": {
-            "device_name": "Nome do Dispositivo",
-            "api_key": "Chave do Dispositivo",
-            "poll_interval": "Intervalo de Atualização (segundos)"
-          }
-        },
-        "reconfigure": {
-          "title": "Reconfigurar Daikin Smart AC",
-          "description": "Insira a Chave do Dispositivo para o SSID: {hostname}.\n\nNota - Para encontrar a Chave do Dispositivo para o SSID mostrado acima, abra o aplicativo móvel Daikin Smart AC e navegue até Menu → Integrations → Home Assistant. Insira o SSID e pressione Enviar.",
-          "data": {
-            "api_key": "Chave do Dispositivo"
-          }
-        },
-        "manual": {
-            "title": "Configuração do Daikin Smart AC",
-            "description": "Abra as configurações do seu roteador de rede e verifique a lista de clientes. O ar-condicionado Daikin deve aparecer na lista com o formato DAIKINXXXXXX.\n\nNota - Para encontrar a Chave do Dispositivo, abra o aplicativo móvel Daikin Smart AC e navegue até Menu → Integrations → Home Assistant. Insira o SSID (DAIKINXXXXXX) e pressione Enviar.",
-            "data": {
-                "device_ip": "Endereço IP do Dispositivo",
-                "device_name": "Nome do Dispositivo",
-                "api_key": "Chave do Dispositivo"
-            }
+  "config": {
+    "flow_title": "Dispositivo Detectado: {name}",
+    "step": {
+      "user": {
+        "title": "Configurar Daikin Smart AC",
+        "description": "Digite o Nome do Dispositivo e a Chave do Dispositivo para o SSID: {hostname}.\n\nObservação – Para encontrar a Chave do Dispositivo para o SSID exibido acima, abra o aplicativo móvel Daikin Smart AC e navegue até Menu → Integrações → Home Assistant. Digite o SSID e pressione Enviar.",
+        "data": {
+          "device_name": "Nome do Dispositivo",
+          "api_key": "Chave do Dispositivo",
+          "poll_interval": "Intervalo de Atualização (segundos)"
         }
       },
-      "abort": {
-        "already_configured": "Dispositivo já configurado.",
-        "cannot_connect": "Não é possível conectar ao dispositivo.",
-        "reconfigure_successful": "Reconfiguração bem-sucedida. A integração foi atualizada.",
-        "unique_id_mismatched": "O ID exclusivo do dispositivo não corresponde ao valor esperado. Por favor, remova a configuração existente e configure novamente."
+      "reconfigure": {
+        "title": "Reconfigurar Daikin Smart AC",
+        "description": "Insira a Chave do Dispositivo para o SSID: {hostname}.\n\nNota - Para encontrar a Chave do Dispositivo para o SSID mostrado acima, abra o aplicativo móvel Daikin Smart AC e navegue até Menu → Integrações → Home Assistant. Insira o SSID e pressione Enviar.",
+        "data": {
+          "api_key": "Chave do Dispositivo"
+        }
       },
-      "error": {
-        "unknown": "Erro desconhecido.",
-        "invalid_auth": "Não foi possível autenticar",
-        "cannot_connect": "Não é possível conectar ao dispositivo.",
-        "invalid_key": "Chave inválida, por favor verifique novamente.",
-        "unique_id_mismatched": "O ID exclusivo do dispositivo não corresponde ao valor esperado. Por favor, remova a configuração existente e configure novamente.",
-        "device_ip_updated": "O IP do dispositivo foi alterado; configuração atualizada."
+      "manual": {
+          "title": "Configuração do Daikin Smart AC",
+          "description": "Abra as configurações do seu roteador de rede e verifique a lista de clientes. O ar-condicionado Daikin deve aparecer na lista com o formato DAIKINXXXXXX.\n\nNota - Para encontrar a Chave do Dispositivo, abra o aplicativo móvel Daikin Smart AC e navegue até Menu → Integrações → Home Assistant. Insira o SSID (DAIKINXXXXXX) e pressione Enviar.",
+          "data": {
+              "device_ip": "Endereço IP do Dispositivo",
+              "device_name": "Nome do Dispositivo",
+              "api_key": "Chave do Dispositivo"
+          }
       }
     },
-    "entity": {
-      "climate": {
-        "daikin_ac": {
-          "state_attributes": {
-            "fan_mode": {
-              "state": {
-                "medium_high": "Médio Alto",
-                "low_medium": "Baixo Médio",
-                "quiet": "Silencioso"
-              }
-            },
-            "preset_mode": {
-              "state": {
-                "eco": "Econo",
-                "boost": "Potente"
-              }
-            }  
-          }
+    "abort": {
+      "already_configured": "Dispositivo já configurado.",
+      "cannot_connect": "Não é possível conectar ao dispositivo.",
+      "reconfigure_successful": "Reconfiguração bem-sucedida. A integração foi atualizada.",
+      "unique_id_mismatched": "O ID exclusivo do dispositivo não corresponde ao valor esperado. Por favor, remova a configuração existente e configure novamente."
+    },
+    "error": {
+      "unknown": "Erro desconhecido.",
+      "invalid_auth": "Não foi possível autenticar",
+      "cannot_connect": "Não é possível conectar ao dispositivo.",
+      "invalid_key": "Chave inválida, por favor verifique novamente.",
+      "unique_id_mismatched": "O ID exclusivo do dispositivo não corresponde ao valor esperado. Por favor, remova a configuração existente e configure novamente.",
+      "device_ip_updated": "O IP do dispositivo foi alterado; configuração atualizada."
+    }
+  },
+  "entity": {
+    "climate": {
+      "daikin_ac": {
+        "state_attributes": {
+          "fan_mode": {
+            "state": {
+              "medium_high": "Médio Alto",
+              "low_medium": "Baixo Médio",
+              "quiet": "Silencioso"
+            }
+          },
+          "preset_mode": {
+            "state": {
+              "eco": "Econo",
+              "boost": "Potente"
+            }
+          }  
         }
       }
     }
+  }
 }
-  
