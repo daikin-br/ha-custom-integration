@@ -1,4 +1,4 @@
-{  
+{
     "config": {
         "flow_title": "Discovered Device: {name}",
         "step": {
@@ -59,7 +59,7 @@
                             "eco": "Econo",
                             "boost": "Power Chill"
                         }
-                    } 
+                    }
                 }
             }
         }

@@ -17,9 +17,6 @@ from homeassistant.components.climate.const import (
     HVACMode,
 )
 from homeassistant.const import ATTR_TEMPERATURE, CONF_API_KEY, UnitOfTemperature
-
-# from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.event import async_track_time_interval
 from pyiotdevice import (
     CommunicationErrorException,
     InvalidDataException,
@@ -27,7 +24,9 @@ from pyiotdevice import (
     send_operation_data,
 )
 
-from .const import DOMAIN, POLL_INTERVAL
+from .const import POLL_INTERVAL
+from .coordinator import DaikinDataUpdateCoordinator
+from .entity import DaikinEntity
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,7 +35,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up Daikin Climate device from a config entry."""
     # Check if the device_key exists in the entry data
     device_key = entry.data.get(CONF_API_KEY)
-    # device_apn = entry.data.get("device_apn")
+    device_apn = entry.data.get("device_apn")
     if not device_key:
         _LOGGER.error("Device key is missing in the configuration entry!")
         return
@@ -75,8 +74,18 @@ async def async_setup_entry(hass, entry, async_add_entities):
         # Logs full traceback
         _LOGGER.exception("Unexpected error: %s", e)
 
+    coordinator = DaikinDataUpdateCoordinator(
+        hass,
+        device_apn=device_apn,
+        update_method=lambda: hass.async_add_executor_job(
+            get_thing_info, ip_address, device_key, "acstatus"
+        ),
+        update_interval=datetime.timedelta(seconds=POLL_INTERVAL),
+    )
+    await coordinator.async_config_entry_first_refresh()
+
     # Create the entity (always)
-    climate_entity = DaikinClimate(entry_data)
+    climate_entity = DaikinClimate(entry_data, coordinator)
 
     # Mark entity as unavailable if the port status retrieval failed
     if not port_status:
@@ -87,19 +96,20 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     # If port status retrieval was successful, update entity properties
     if port_status:
-        await climate_entity.update_entity_properties(status)
+        climate_entity.update_entity_properties(status)
 
 
-class DaikinClimate(ClimateEntity):
+# class DaikinClimate(ClimateEntity):
+class DaikinClimate(DaikinEntity, ClimateEntity):
     """Representation of an Daikin Climate device."""
 
-    _attr_has_entity_name = True
     _attr_name = None
 
-    def __init__(self, device_data):
+    def __init__(self, device_data, coordinator):
         """Initialize the climate device."""
+        super().__init__(coordinator)
         self._attr_available = True
-        self._remove_listener = None
+        # self._remove_listener = None
 
         self._device_key = device_data.get(CONF_API_KEY, None)
         if self._device_key is None:
@@ -173,17 +183,6 @@ class DaikinClimate(ClimateEntity):
     def power_state(self):
         """Return the power state."""
         return self._power_state
-
-    @property
-    def device_info(self):
-        """Return device information."""
-        return {
-            "identifiers": {(DOMAIN, self._unique_id)},
-            "name": self._device_name,
-            "manufacturer": "Daikin",
-            "model": "Smart AC Series",
-            "sw_version": self._device_info.get("fw_ver"),
-        }
 
     @property
     def hvac_modes(self):
@@ -339,9 +338,6 @@ class DaikinClimate(ClimateEntity):
             "low": 3,
             "quiet": 18,
         }
-
-        # Store the previous fan mode value
-        # previous_fan_mode = self._fan_mode
 
         # Fan speed cannot be changed in DRY MODE
         if self._hvac_mode == HVACMode.DRY:
@@ -524,7 +520,7 @@ class DaikinClimate(ClimateEntity):
         except Exception as e:
             _LOGGER.error("Failed to send command: %s", e)
 
-    async def update_entity_properties(self, status):
+    def update_entity_properties(self, status):
         """Asynchronously update entity properties based on the received status."""
         port_status = status.get("port1", {})
 
@@ -563,51 +559,23 @@ class DaikinClimate(ClimateEntity):
         # Skip this update cycle
         self._skip_update = True
 
-    async def async_update(self, _=None):
-        """Fetch new state data for the entity."""
-        if self._skip_update:
-            # Skip this update cycle
-            self._skip_update = False
-            return
-
+    def _handle_coordinator_update(self):
+        """Handle updated data from the coordinator."""
+        data = self.coordinator.data
         try:
-            # Offload the blocking call to a thread pool
-            status = await self.hass.async_add_executor_job(
-                get_thing_info, self._ip_address, self._device_key, "acstatus"
-            )
-
-            # Update entity properties with the latest device state
-            _LOGGER.debug(
-                "Updating entity properties - Name: %s, APN: %s",
-                self._device_name,
-                self._unique_id,
-            )
-            await self.update_entity_properties(status)
-            self._attr_available = True
-
-        except (InvalidDataException, CommunicationErrorException) as e:
-            _LOGGER.error("Error updating device status for %s, %s", self._unique_id, e)
-            self._attr_available = False
-        except Exception as e:
+            if data and data.get("port1"):
+                _LOGGER.debug(
+                    "Updating entity properties - Name: %s, APN: %s",
+                    self._device_name,
+                    self._unique_id,
+                )
+                self.update_entity_properties(self.coordinator.data)
+                self._attr_available = True
+            else:
+                self._attr_available = False
+        except Exception as err:
             _LOGGER.error(
-                "Unexpected error while updating device status for %s, %s",
-                self._unique_id,
-                e,
+                "Error updating entity properties for %s: %s", self._unique_id, err
             )
             self._attr_available = False
         self.async_write_ha_state()
-
-    async def async_added_to_hass(self):
-        """Register update interval when entity is added to HA."""
-        _LOGGER.debug("Registering periodic polling every %s seconds", POLL_INTERVAL)
-        self._remove_listener = async_track_time_interval(
-            self.hass, self.async_update, datetime.timedelta(seconds=POLL_INTERVAL)
-        )
-
-    async def async_will_remove_from_hass(self):
-        """Cancel the update interval when entity is removed from HA."""
-        if hasattr(self, "_remove_listener") and self._remove_listener:
-            _LOGGER.debug("Removing update listener")
-            # Cancel the scheduled update
-            self._remove_listener()
-            self._remove_listener = None
