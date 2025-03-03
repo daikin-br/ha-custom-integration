@@ -9,6 +9,6 @@
   "issue_tracker": "https://github.com/daikin-br/ha-custom-integration/issues",
   "loggers": ["pyiotdevice"],
   "requirements": ["pyiotdevice==1.0.8"],
-  "version": "1.0.0",
+  "version": "1.0.1",
   "zeroconf": ["_iota._tcp.local."]
 }
