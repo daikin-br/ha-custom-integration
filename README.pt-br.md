@@ -40,7 +40,10 @@ Se não for detectado automaticamente, você pode configurar a integração manu
 
 ### Nota:
 
-Se sua unidade Daikin Smart AC não estiver na mesma rede que sua instância do Home Assistant (por exemplo, se sua rede estiver segmentada), a **descoberta automática do dispositivo** pode não funcionar. Nesse caso, você precisará encontrar manualmente o IP do dispositivo, acessando a página de configuração do seu roteador e localizando o IP do cliente para o dispositivo Daikin Smart AC (formato do hostname: DAIKINXXXXXX).
+Se a sua unidade Daikin Smart AC não estiver na mesma rede que sua instância do Home Assistant (por exemplo, se sua rede estiver segmentada), **a descoberta automática de dispositivos** pode não funcionar. Nesse caso, você precisará localizar manualmente o **IP do Dispositivo** por:
+
+- Acessar a página de configuração do seu roteador de rede e localizar o IP do cliente para o dispositivo Daikin Smart AC (formato do hostname: DAIKINXXXXXX).
+
 
 **Para configurar o dispositivo, certifique-se de que as seguintes portas estejam acessíveis:**
 

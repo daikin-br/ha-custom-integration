@@ -44,7 +44,7 @@ If it wasn’t discovered automatically, You can set up a manual integration ent
 
 ### Note:
 
-If your Daikin Smart AC unit is not on the same network as your Home Assistant instance (e.g., if your network is segmented), **automatic device discovery** may not work. In this case, you will need to manually find the Device IP by:
+If your Daikin Smart AC unit is not on the same network as your Home Assistant instance (e.g., if your network is segmented), **automatic device discovery** may not work. In this case, you will need to manually find the **Device IP** by:
 
 - Accessing your network router’s setup page and locating the client IP for the Daikin Smart AC device (hostname format: DAIKINXXXXXX).
 
