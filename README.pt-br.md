@@ -73,7 +73,7 @@ Não existem problemas comuns conhecidos com esta integração.
 
 Esta integração segue o procedimento padrão de remoção de integrações. Nenhuma etapa extra é necessária.
 1. No Home Assistant, vá em [**Configurações -> Dispositivos & Serviços**](https://my.home-assistant.io/redirect/integrations/).
-2. Selecione a integração **Daikin Smart AC** e, no menu de três pontos (:material-dots-vertical:), escolha **Excluir**.
+2. Selecione a integração **Daikin Smart AC** e, no menu de três pontos (⋮), escolha **Excluir**.
 3. [Reinicie o Home Assistant](https://www.home-assistant.io/docs/configuration/#reloading-the-configuration-to-apply-changes).
 
 
