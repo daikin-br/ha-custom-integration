@@ -72,6 +72,20 @@ The `daikin_br` climate platform integrates Daikin air conditioning systems with
 
 Current ambient temperature is also displayed.
 
+## Known limitations
+
+There are no known limitations for this integration.
+
+## Troubleshooting
+
+There are no commonly known issues with this integration.
+
+## Removing the integration
+
+This integration follows standard integration removal. No extra steps are required.
+1. In Home Assistant, go to [**Setting->Device & Services**](https://my.home-assistant.io/redirect/integrations/).
+2. Select the **Daikin Smart AC** integration and in the three-dot menu (:material-dots-vertical:), select **Delete**.
+3. [Restart Home Assistant](https://www.home-assistant.io/docs/configuration/#reloading-the-configuration-to-apply-changes).
 
 ## Contributions are welcome!
 
