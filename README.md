@@ -72,6 +72,12 @@ The `daikin_br` climate platform integrates Daikin air conditioning systems with
 
 Current ambient temperature is also displayed.
 
+## Data updates
+
+The integration fetches data from the device every 10 seconds by default. 
+It is recommended not to reduce the polling time below 10 seconds. For users who want to set their own custom polling interval, they can [configure a custom polling interval](https://www.home-assistant.io/common-tasks/general/#defining-a-custom-polling-interval).
+
+
 ## Known limitations
 
 There are no known limitations for this integration.
@@ -82,7 +88,7 @@ There are no commonly known issues with this integration.
 
 ## Removing the integration
 
-This integration follows standard integration removal. No extra steps are required.
+This integration follows standard integration removal. No extra steps are required. Refer to [Removing an integration instance](https://www.home-assistant.io/common-tasks/general/#removing-an-integration-instance) for details.
 1. In Home Assistant, go to [**Setting->Device & Services**](https://my.home-assistant.io/redirect/integrations/).
 2. Select the **Daikin Smart AC** integration and in the three-dot menu (⋮), select **Delete**.
 3. [Restart Home Assistant](https://www.home-assistant.io/docs/configuration/#reloading-the-configuration-to-apply-changes).

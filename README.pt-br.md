@@ -61,18 +61,23 @@ A plataforma de climatização `daikin_br` integra os sistemas de ar-condicionad
 
 A temperatura ambiente atual também é exibida.
 
-## Limitações conhecidas
+## Atualizações de Dados
+
+A integração obtém dados do dispositivo a cada 10 segundos, por padrão. 
+Recomenda-se não reduzir o tempo de consulta para menos de 10 segundos. Para os usuários que desejam definir seu próprio intervalo de consulta personalizado, eles podem [configurar um intervalo de consulta personalizado](https://www.home-assistant.io/common-tasks/general/#defining-a-custom-polling-interval).
+
+## Limitações Conhecidas
 
 Não há limitações conhecidas para esta integração.
 
-## Solução de problemas
+## Solução de Problemas
 
-Não existem problemas comuns conhecidos com esta integração.
+Não há problemas comuns conhecidos com esta integração.
 
-## Removendo a integração
+## Removendo a Integração
 
-Esta integração segue o procedimento padrão de remoção de integrações. Nenhuma etapa extra é necessária.
-1. No Home Assistant, vá em [**Configurações -> Dispositivos & Serviços**](https://my.home-assistant.io/redirect/integrations/).
+Esta integração segue o procedimento padrão de remoção de integrações. Nenhuma etapa adicional é necessária. Consulte [Removendo uma instância de integração](https://www.home-assistant.io/common-tasks/general/#removing-an-integration-instance) para mais detalhes.
+1. No Home Assistant, vá para [**Configurações -> Dispositivos & Serviços**](https://my.home-assistant.io/redirect/integrations/).
 2. Selecione a integração **Daikin Smart AC** e, no menu de três pontos (⋮), escolha **Excluir**.
 3. [Reinicie o Home Assistant](https://www.home-assistant.io/docs/configuration/#reloading-the-configuration-to-apply-changes).
 
