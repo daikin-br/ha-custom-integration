@@ -9,9 +9,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_API_KEY
-
-# from homeassistant.helpers import config_validation as cv
-from pyiotdevice import get_hostname, get_thing_info
+from pyiotdevice import async_get_thing_info, get_hostname
 from zeroconf import ServiceInfo
 
 from .const import COMMAND_SUFFIX, DOMAIN
@@ -135,9 +133,7 @@ class ConfigFlow(config_entries.ConfigFlow):
                     errors[CONF_API_KEY] = "invalid_key"
 
                 # Step 2: Validate key by attempting decryption
-                elif not await self.hass.async_add_executor_job(
-                    get_thing_info, ip_address, api_key, "acstatus"
-                ):
+                elif not await async_get_thing_info(ip_address, api_key, "acstatus"):
                     _LOGGER.error("Invalid device key or host not reachable")
                     errors[CONF_API_KEY] = "cannot_connect"
 
@@ -196,16 +192,12 @@ class ConfigFlow(config_entries.ConfigFlow):
                 errors[CONF_API_KEY] = "invalid_key"
 
             # Step 2: Validate key by attempting decryption
-            elif not await self.hass.async_add_executor_job(
-                get_thing_info, ip_address, api_key, "acstatus"
-            ):
+            elif not await async_get_thing_info(ip_address, api_key, "acstatus"):
                 _LOGGER.error("Invalid device key or host not reachable")
                 errors[CONF_API_KEY] = "cannot_connect"
             else:
                 # Call get_thing_info to try to fetch device details
-                device_info = await self.hass.async_add_executor_job(
-                    get_thing_info, ip_address, api_key, "device"
-                )
+                device_info = await async_get_thing_info(ip_address, api_key, "device")
                 if not device_info or "apn" not in device_info:
                     errors["device_ip"] = "cannot_connect"
                 else:
@@ -277,9 +269,7 @@ class ConfigFlow(config_entries.ConfigFlow):
                 errors[CONF_API_KEY] = "required"
             elif not self._is_valid_base64(new_api_key):
                 errors[CONF_API_KEY] = "invalid_key"
-            elif not await self.hass.async_add_executor_job(
-                get_thing_info, ip_address, new_api_key, "device"
-            ):
+            elif not await async_get_thing_info(ip_address, new_api_key, "device"):
                 errors[CONF_API_KEY] = "cannot_connect"
 
             if not errors:

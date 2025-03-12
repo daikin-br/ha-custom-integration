@@ -1,0 +1,67 @@
+{
+    "config": {
+        "flow_title": "Discovered Device: {name}",
+        "step": {
+            "user": {
+                "title": "Setup Daikin Smart AC",
+                "description": "Enter the Device Name and Device Key for SSID: {hostname}.\n\nNote - To find the Device Key for the SSID shown above, open the Daikin Smart AC mobile app and navigate to Menu → Integrations → Home Assistant. Enter the SSID and press Submit.",
+                "data": {
+                    "device_name": "Device Name",
+                    "api_key": "Device Key",
+                    "poll_interval": "Poll Interval (seconds)"
+                }
+            },
+            "reconfigure": {
+                "title": "Reconfigure Daikin Smart AC",
+                "description": "Enter the Device Key for SSID: {hostname}.\n\nNote - To find the Device Key for the SSID shown above, open the Daikin Smart AC mobile app and navigate to Menu → Integrations → Home Assistant. Enter the SSID and press Submit.",
+                "data": {
+                    "api_key": "Device Key"
+                }
+            },
+            "manual": {
+                "title": "Setup Daikin Smart AC",
+                "description": "Open your network router setup and check the client list. The Daikin AC should appear in the list with the format DAIKINXXXXXX.\n\nNote - To find the Device Key, open the Daikin Smart AC mobile app and navigate to Menu → Integrations → Home Assistant. Enter the SSID (DAIKINXXXXXX) and press Submit.",
+                "data": {
+                    "device_ip": "Device IP Address",
+                    "device_name": "Device Name",
+                    "api_key": "Device Key"
+                }
+            }
+        },
+        "abort": {
+            "already_configured": "Device already configured.",
+            "cannot_connect": "Cannot connect to device.",
+            "reconfigure_successful": "Reconfiguration successful. The integration has been updated.",
+            "unique_id_mismatched": "The device's unique ID does not match the expected value. Please remove the existing configuration and set it up again.",
+            "device_ip_updated": "Device IP changed; configuration updated."
+        },
+        "error": {
+            "unknown": "Unknown error.",
+            "invalid_auth": "Unable to authenticate",
+            "cannot_connect": "Cannot connect to device.",
+            "invalid_key": "Invalid key, please check again.",
+            "unique_id_mismatched": "The device's unique ID does not match the expected value. Please remove the existing configuration and set it up again."
+        }
+    },
+    "entity": {
+        "climate": {
+            "daikin_ac": {
+                "state_attributes": {
+                    "fan_mode": {
+                        "state": {
+                            "medium_high": "Medium High",
+                            "low_medium": "Low Medium",
+                            "quiet": "Quiet"
+                        }
+                    },
+                    "preset_mode": {
+                        "state": {
+                            "eco": "Econo",
+                            "boost": "Power Chill"
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

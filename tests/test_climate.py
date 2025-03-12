@@ -72,9 +72,9 @@ async def test_async_setup_entry_invalid_device_key(hass, caplog):
     # Use MagicMock for async_add_entities.
     async_add_entities = MagicMock()
 
-    # Patch get_thing_info to raise an exception (simulating an invalid device key).
+    # Patch async_get_thing_info to raise an exception (invalid device key).
     with patch(
-        "custom_components.daikin_br.climate.get_thing_info",
+        "custom_components.daikin_br.climate.async_get_thing_info",
         side_effect=Exception("Invalid device key"),
     ):
         # Call async_setup_entry which should internally call async_add_entities.
@@ -113,9 +113,9 @@ async def test_async_setup_entry_communication_failure(hass, caplog):
 
     async_add_entities = MagicMock()
 
-    # Simulate an exception in get_thing_info
+    # Simulate an exception in async_get_thing_info
     with patch(
-        "custom_components.daikin_br.climate.get_thing_info",
+        "custom_components.daikin_br.climate.async_get_thing_info",
         side_effect=Exception("Connection error"),
     ):
         await async_setup_entry(hass, entry, async_add_entities)
@@ -164,10 +164,10 @@ async def test_async_setup_entry_no_port_status(hass, caplog):
         "custom_components.daikin_br.climate.DaikinClimate.async_write_ha_state",
         return_value=None,
     ):
-        # Patch get_thing_info to return an empty dictionary
+        # Patch async_get_thing_info to return an empty dictionary
         # (simulating no port_status).
         with patch(
-            "custom_components.daikin_br.climate.get_thing_info", return_value={}
+            "custom_components.daikin_br.climate.async_get_thing_info", return_value={}
         ):
             await async_setup_entry(hass, entry, async_add_entities)
 
@@ -195,7 +195,7 @@ async def test_async_setup_entry_no_port_status(hass, caplog):
 
 @pytest.mark.asyncio
 async def test_async_setup_entry_success(hass, caplog):
-    """Test setup succeeds when get_thing_info returns valid port_status."""
+    """Test setup succeeds when async_get_thing_info returns valid port_status."""
     entry = MagicMock()
     entry.data = {
         "device_apn": "TEST_APN",
@@ -203,14 +203,14 @@ async def test_async_setup_entry_success(hass, caplog):
         "api_key": "VALID_KEY",
         "device_name": "TEST DEVICE",
     }
-
     async_add_entities = MagicMock()
 
     # Mock a valid device response.
     mock_status = {"port1": {"fw_ver": "1.0.0", "temperature": 24}}
 
     with patch(
-        "custom_components.daikin_br.climate.get_thing_info", return_value=mock_status
+        "custom_components.daikin_br.climate.async_get_thing_info",
+        return_value=mock_status,
     ), patch.object(
         DaikinClimate, "update_entity_properties", MagicMock()
     ) as mock_update:
@@ -225,7 +225,10 @@ async def test_async_setup_entry_success(hass, caplog):
     # Retrieve the created entity.
     entity = async_add_entities.call_args[0][0][0]
 
-    # For testing, assign hass to the entity so that its available property can be read.
+    # Explicitly set last_update_success = True for the mocked runtime_data.
+    entry.runtime_data.last_update_success = True
+
+    # Assign hass to the entity so that its available property can be read.
     entity.hass = hass
 
     # Ensure the entity is a DaikinClimate instance and marked as available.
@@ -578,7 +581,7 @@ async def test_set_thing_state(hass, caplog):
     # Patch async_write_ha_state to a MagicMock.
     climate_entity.async_write_ha_state = MagicMock()
 
-    # Mock response from send_operation_data.
+    # Mock response from async_send_operation_data.
     mock_response = {
         "port1": {
             "power": 1,
@@ -592,9 +595,9 @@ async def test_set_thing_state(hass, caplog):
         }
     }
 
-    # Patch send_operation_data to return the mock_response.
+    # Patch async_send_operation_data to return the mock_response.
     with patch(
-        "custom_components.daikin_br.climate.send_operation_data",
+        "custom_components.daikin_br.climate.async_send_operation_data",
         return_value=mock_response,
     ):
         data = json.dumps({"port1": {"temperature": 22}})
@@ -618,9 +621,9 @@ async def test_set_thing_state(hass, caplog):
         # Verify that the log contains the expected preset mode set message.
         assert "Preset mode set to : eco" in caplog.text
 
-    # Test error scenario: simulate send_operation_data raising an exception.
+    # Test error scenario: simulate async_send_operation_data raising an exception.
     with patch(
-        "custom_components.daikin_br.climate.send_operation_data",
+        "custom_components.daikin_br.climate.async_send_operation_data",
         side_effect=Exception("Failed to send command"),
     ):
         caplog.clear()  # Clear previous logs.
@@ -993,9 +996,9 @@ async def test_set_thing_state_exception(dummy_coordinator, caplog, hass):
     entity._device_key = "VALID_KEY"
     entity._command_suffix = "cmd"
     entity.async_write_ha_state = MagicMock()
-    # Simulate an exception raised by send_operation_data.
+    # Simulate an exception raised by async_send_operation_data.
     with patch(
-        "custom_components.daikin_br.climate.send_operation_data",
+        "custom_components.daikin_br.climate.async_send_operation_data",
         side_effect=Exception("Simulated error"),
     ):
         await entity.set_thing_state(json.dumps({"port1": {"temperature": 22}}))
@@ -1039,7 +1042,7 @@ async def test_async_setup_entry_timeout(hass, caplog):
     }
     async_add_entities = MagicMock()
     with patch(
-        "custom_components.daikin_br.climate.get_thing_info",
+        "custom_components.daikin_br.climate.async_get_thing_info",
         side_effect=TimeoutError("Timeout error"),
     ):
         await async_setup_entry(hass, entry, async_add_entities)
@@ -1058,7 +1061,7 @@ async def test_async_setup_entry_network_error(hass, caplog):
     }
     async_add_entities = MagicMock()
     with patch(
-        "custom_components.daikin_br.climate.get_thing_info",
+        "custom_components.daikin_br.climate.async_get_thing_info",
         side_effect=OSError("Network error"),
     ):
         await async_setup_entry(hass, entry, async_add_entities)
@@ -1182,7 +1185,9 @@ async def test_async_setup_entry_no_port_status_returns_error(hass, caplog):
         "device_name": "TEST DEVICE",
     }
     async_add_entities = MagicMock()
-    with patch("custom_components.daikin_br.climate.get_thing_info", return_value={}):
+    with patch(
+        "custom_components.daikin_br.climate.async_get_thing_info", return_value={}
+    ):
         await async_setup_entry(hass, entry, async_add_entities)
     # Expect the error log from the branch that raises ValueError and is caught
     assert "Device setup failed. Invalid device key." in caplog.text
@@ -1245,9 +1250,9 @@ async def test_set_thing_state_preset_boost_and_none(dummy_coordinator, hass):
         }
     }
 
-    # Patch send_operation_data to return response_boost first, then response_none.
+    # Patch async_send_operation_data to return response_boost first.
     with patch(
-        "custom_components.daikin_br.climate.send_operation_data",
+        "custom_components.daikin_br.climate.async_send_operation_data",
         side_effect=[response_boost, response_none],
     ):
         # First call: Expect PRESET_BOOST
@@ -1308,7 +1313,7 @@ async def test_set_thing_state_preset_boost(dummy_coordinator, hass):
     }
 
     with patch(
-        "custom_components.daikin_br.climate.send_operation_data",
+        "custom_components.daikin_br.climate.async_send_operation_data",
         return_value=mock_response,
     ):
         data = json.dumps({"port1": {"temperature": 22}})
@@ -1341,7 +1346,7 @@ async def test_set_thing_state_invalid_data_exception(dummy_coordinator, hass, c
     data = json.dumps({"port1": {"temperature": 22}})
 
     with patch(
-        "custom_components.daikin_br.climate.send_operation_data",
+        "custom_components.daikin_br.climate.async_send_operation_data",
         side_effect=InvalidDataException("Invalid Data"),
     ):
         await entity.set_thing_state(data)

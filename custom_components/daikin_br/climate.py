@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import datetime
 import json
 import logging
 
@@ -20,22 +19,23 @@ from homeassistant.const import ATTR_TEMPERATURE, CONF_API_KEY, UnitOfTemperatur
 from pyiotdevice import (
     CommunicationErrorException,
     InvalidDataException,
-    get_thing_info,
-    send_operation_data,
+    async_get_thing_info,
+    async_send_operation_data,
 )
 
-from .const import POLL_INTERVAL
-from .coordinator import DaikinDataUpdateCoordinator
+from .coordinator import DaikinConfigEntry
 from .entity import DaikinEntity
 
 _LOGGER = logging.getLogger(__name__)
 
+# Coordinator is used to centralize the data updates
+PARALLEL_UPDATES = 0
 
-async def async_setup_entry(hass, entry, async_add_entities):
+
+async def async_setup_entry(hass, entry: DaikinConfigEntry, async_add_entities):
     """Set up Daikin Climate device from a config entry."""
     # Check if the device_key exists in the entry data
     device_key = entry.data.get(CONF_API_KEY)
-    device_apn = entry.data.get("device_apn")
     if not device_key:
         _LOGGER.error("Device key is missing in the configuration entry!")
         return
@@ -49,17 +49,15 @@ async def async_setup_entry(hass, entry, async_add_entities):
     port_status = None
 
     try:
-        status = await hass.async_add_executor_job(
-            get_thing_info, ip_address, device_key, "acstatus"
-        )
+        status = await async_get_thing_info(ip_address, device_key, "acstatus")
+        if isinstance(status, dict):
+            port_status = status.get("port1", {})
+            if not port_status:
+                _LOGGER.error("Device setup failed. Invalid device key.")
+                raise ValueError("Invalid device key: No port_status")
 
-        port_status = status.get("port1", {})
-        if not port_status:
-            _LOGGER.error("Device setup failed. Invalid device key.")
-            raise ValueError("Invalid device key: No port_status")
-
-        # Update firmware version if successful
-        entry_data["fw_ver"] = port_status.get("fw_ver", "Unknown")
+            # Update firmware version if successful
+            entry_data["fw_ver"] = port_status.get("fw_ver", "Unknown")
 
     except (ValueError, KeyError) as e:
         _LOGGER.error("Configuration error: %s", e)
@@ -74,18 +72,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
         # Logs full traceback
         _LOGGER.exception("Unexpected error: %s", e)
 
-    coordinator = DaikinDataUpdateCoordinator(
-        hass,
-        device_apn=device_apn,
-        update_method=lambda: hass.async_add_executor_job(
-            get_thing_info, ip_address, device_key, "acstatus"
-        ),
-        update_interval=datetime.timedelta(seconds=POLL_INTERVAL),
-    )
-    await coordinator.async_config_entry_first_refresh()
-
     # Create the entity (always)
-    climate_entity = DaikinClimate(entry_data, coordinator)
+    climate_entity = DaikinClimate(entry_data, entry.runtime_data)
 
     # Mark entity as unavailable if the port status retrieval failed
     if not port_status:
@@ -471,8 +459,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         try:
             _LOGGER.debug("send command request: %s", data)
             # Send command using send_operation_data and await the response
-            response = await self.hass.async_add_executor_job(
-                send_operation_data,
+            response = await async_send_operation_data(
                 self._ip_address,
                 self._device_key,
                 data,

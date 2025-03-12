@@ -227,8 +227,9 @@ async def test_discovered_flow_all_inputs_success(config_flow, dummy_discovery_i
     }
 
     # Patch methods that are used in the successful branch of async_step_user.
-    with patch.object(config_flow, "_is_valid_base64", return_value=True), patch.object(
-        config_flow.hass, "async_add_executor_job", new=AsyncMock(return_value=True)
+    with patch.object(config_flow, "_is_valid_base64", return_value=True), patch(
+        "custom_components.daikin_br.config_flow.async_get_thing_info",
+        new=AsyncMock(return_value=True),
     ), patch(
         "custom_components.daikin_br.config_flow.get_hostname",
         return_value="TestDevice",
@@ -480,18 +481,17 @@ async def test_manual_flow_all_inputs_success(config_flow):
     }
     config_flow.context["discovery_info"] = {}
 
-    async def fake_async_add_executor_job(func, *args):
-        # args[2] is the mode: "acstatus" or "device"
-        if args[2] == "acstatus":
+    # Create a fake async_get_thing_info function
+    async def fake_async_get_thing_info(ip, key, endpoint):
+        if endpoint == "acstatus":
             return True
-        elif args[2] == "device":
+        elif endpoint == "device":
             return {"apn": "TEST_APN"}
         return None
 
-    with patch.object(config_flow, "_is_valid_base64", return_value=True), patch.object(
-        config_flow.hass,
-        "async_add_executor_job",
-        side_effect=fake_async_add_executor_job,
+    with patch.object(config_flow, "_is_valid_base64", return_value=True), patch(
+        "custom_components.daikin_br.config_flow.async_get_thing_info",
+        new=fake_async_get_thing_info,
     ), patch(
         "custom_components.daikin_br.config_flow.get_hostname", return_value="TestHost"
     ), patch.object(
@@ -658,9 +658,11 @@ async def test_reconfigure_success(config_flow):
         CONF_API_KEY: "VALIDBASE64KEY==",  # Only API key provided
     }
 
-    # Patch necessary methods for a successful reconfiguration
-    with patch.object(config_flow, "_is_valid_base64", return_value=True), patch.object(
-        config_flow.hass, "async_add_executor_job", new=AsyncMock(return_value=True)
+    # Patch necessary methods for a successful reconfiguration.
+    # Patch async_get_thing_info to return True.
+    with patch.object(config_flow, "_is_valid_base64", return_value=True), patch(
+        "custom_components.daikin_br.config_flow.async_get_thing_info",
+        new=AsyncMock(return_value=True),
     ), patch.object(
         config_flow, "async_set_unique_id", new=AsyncMock()
     ) as mock_set_unique_id, patch.object(
@@ -722,7 +724,7 @@ async def test_reconfigure_connection_failure(config_flow):
     user_input = {CONF_API_KEY: "VALIDBASE64KEY=="}
 
     with patch(
-        "custom_components.daikin_br.config_flow.get_thing_info",
+        "custom_components.daikin_br.config_flow.async_get_thing_info",
         return_value=False,  # Simulating connection failure
     ):
         result = await config_flow.async_step_reconfigure(user_input)
@@ -874,11 +876,13 @@ async def test_async_step_manual_device_info_missing_apn(hass):
     flow.hass = hass  # Set hass on the flow to enable async_add_executor_job calls.
     flow.context = {}  # No discovery_info so that async_step_manual is used.
 
-    # Patch hass.async_add_executor_job to return awaitables.
-    with patch.object(
-        hass,
-        "async_add_executor_job",
-        side_effect=[async_return({"dummy": "data"}), async_return({})],
+    # Patch _is_valid_base64 to always return True.
+    # Patch async_get_thing_info to simulate:
+    #   - First call ("acstatus") returning a dummy truthy value.
+    #   - Second call ("device") returning an empty dict (missing 'apn').
+    with patch.object(flow, "_is_valid_base64", return_value=True), patch(
+        "custom_components.daikin_br.config_flow.async_get_thing_info",
+        new=AsyncMock(side_effect=[{"dummy": "data"}, {}]),
     ):
         result = await flow.async_step_manual(user_input)
 
@@ -902,16 +906,12 @@ async def test_async_step_manual_already_configured(hass):
     flow = ConfigFlow()
     flow.hass = hass
     flow.context = {}  # manual step is used because no discovery_info
-    # Patch hass.async_add_executor_job to simulate:
+    # Patch async_get_thing_info to simulate:
     # - First call (for "acstatus") returns a truthy value.
     # - Second call (for "device") returns a dict with "apn".
-    with patch.object(
-        hass,
-        "async_add_executor_job",
-        side_effect=[
-            async_return({"dummy": "data"}),
-            async_return({"apn": "TEST_APN"}),
-        ],
+    with patch(
+        "custom_components.daikin_br.config_flow.async_get_thing_info",
+        new=AsyncMock(side_effect=[{"dummy": "data"}, {"apn": "TEST_APN"}]),
     ):
         # Patch _async_find_existing_entry to return an existing entry.
         with patch.object(flow, "_async_find_existing_entry", return_value=MagicMock()):
