@@ -11,6 +11,8 @@ from homeassistant.data_entry_flow import RESULT_TYPE_ABORT, RESULT_TYPE_FORM
 
 from custom_components.daikin_br.config_flow import ConfigFlow
 
+# pylint: disable=redefined-outer-name, too-few-public-methods
+# pylint: disable=protected-access
 # --- Dummy Classes for Config Flow Testing ---
 
 
@@ -481,8 +483,9 @@ async def test_manual_flow_all_inputs_success(config_flow):
     }
     config_flow.context["discovery_info"] = {}
 
+    # pylint: disable=no-else-return
     # Create a fake async_get_thing_info function
-    async def fake_async_get_thing_info(ip, key, endpoint):
+    async def fake_async_get_thing_info(_ip, _key, endpoint):
         if endpoint == "acstatus":
             return True
         elif endpoint == "device":

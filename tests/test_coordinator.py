@@ -6,11 +6,13 @@ from unittest.mock import MagicMock
 
 import pytest
 from homeassistant.const import CONF_API_KEY
-from homeassistant.helpers.update_coordinator import UpdateFailed
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from custom_components.daikin_br.coordinator import DaikinDataUpdateCoordinator
 
 
+# pylint: disable=redefined-outer-name, too-few-public-methods
+# pylint: disable=protected-access
 # Dummy hass fixture for testing.
 @pytest.fixture
 def dummy_hass():
@@ -44,7 +46,7 @@ def dummy_config_entry():
 class DummyCoordinator:
     """Create dummy data coordinator."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self):
         """Initialize data coordinator."""
         # Accept any parameters (including config_entry) without error.
         self.data = {}  # Dummy data attribute
@@ -63,8 +65,6 @@ async def test_async_update_data_valid(dummy_hass, dummy_config_entry):
         return {"port1": {"fw_ver": "1.0.0", "temperature": 22}}
 
     # Patch DataUpdateCoordinator.__init__ to accept extra keyword arguments
-    from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-
     original_init = DataUpdateCoordinator.__init__
 
     def dummy_init(self, hass, logger, **kwargs):
@@ -108,8 +108,6 @@ async def test_async_update_data_invalid_type(dummy_hass, caplog, dummy_config_e
         return "invalid"  # not a dict
 
     # Patch DataUpdateCoordinator.__init__ to accept extra keyword arguments
-    from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-
     original_init = DataUpdateCoordinator.__init__
 
     def dummy_init(self, hass, logger, **kwargs):
@@ -147,6 +145,7 @@ async def test_async_update_data_invalid_type(dummy_hass, caplog, dummy_config_e
     assert "Unable to retrieve device status data for TEST_APN" in caplog.text
 
 
+# pylint: disable=broad-exception-raised
 @pytest.mark.asyncio
 async def test_async_update_data_exception(dummy_hass, caplog, dummy_config_entry):
     """
@@ -159,8 +158,6 @@ async def test_async_update_data_exception(dummy_hass, caplog, dummy_config_entr
         raise Exception("Test exception")
 
     # Patch DataUpdateCoordinator.__init__ to accept extra keyword arguments
-    from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-
     original_init = DataUpdateCoordinator.__init__
 
     def dummy_init(self, hass, logger, **kwargs):

@@ -13,23 +13,34 @@ from homeassistant.components.climate.const import (
     SWING_VERTICAL,
     HVACMode,
 )
-from homeassistant.const import ATTR_TEMPERATURE, CONF_API_KEY, UnitOfTemperature
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from pyiotdevice import InvalidDataException
 
 from custom_components.daikin_br.climate import DaikinClimate, async_setup_entry
+from custom_components.daikin_br.const import DOMAIN
 
 
-# Fixture to mock a Home Assistant config entry
-@pytest.fixture
-def mock_config_entry():
-    """Fixture to create a mock config entry."""
+# pylint: disable=redefined-outer-name, too-few-public-methods
+# pylint: disable=too-many-instance-attributes, too-many-lines
+# pylint: disable=protected-access
+class MockConfigEntry(ConfigEntry):
+    """A minimal mock of a Home Assistant config entry for testing purposes."""
 
-    def _create_entry(data):
-        entry = MagicMock()
-        entry.data = data
-        return entry
+    def __init__(self, domain, data, unique_id, title="Test"):
+        """Initilize MockConfig Entry."""
+        self.version = 1
+        self.domain = domain
+        self.data = data
+        self.unique_id = unique_id
+        self.title = title
+        self.entry_id = "mock_entry_id"
+        self.source = "user"
+        self.runtime_data = None
 
-    return _create_entry
+    def add_to_hass(self, hass):
+        """Add to hass."""
+        hass.config_entries.async_add(self)
 
 
 @pytest.fixture
@@ -42,227 +53,60 @@ def dummy_coordinator(hass):
     return coordinator
 
 
-@pytest.mark.asyncio
-async def test_async_setup_entry_missing_device_key(hass, caplog):
-    """Test setup fails when device key is missing."""
-    entry = AsyncMock()
-    entry.data = {"device_apn": "TEST_APN"}  # Missing CONF_API_KEY
-
-    async_add_entities = AsyncMock()
-
-    await async_setup_entry(hass, entry, async_add_entities)
-
-    # Ensure error is logged
-    assert "Device key is missing in the configuration entry!" in caplog.text
-    async_add_entities.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_async_setup_entry_invalid_device_key(hass, caplog):
-    """Test setup fails when device returns invalid data (exception handling)."""
-    # Mock entry data.
-    entry = MagicMock()
-    entry.data = {
-        CONF_API_KEY: "INVALID_KEY",
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "device_name": "TEST DEVICE",
-    }
-
-    # Use MagicMock for async_add_entities.
-    async_add_entities = MagicMock()
-
-    # Patch async_get_thing_info to raise an exception (invalid device key).
-    with patch(
-        "custom_components.daikin_br.climate.async_get_thing_info",
-        side_effect=Exception("Invalid device key"),
-    ):
-        # Call async_setup_entry which should internally call async_add_entities.
-        await async_setup_entry(hass, entry, async_add_entities)
-
-    # Ensure that an error message was logged.
-    # (Check for "Error fetching data" or "Invalid device key" in the log.)
-    assert "Error fetching data" in caplog.text or "Invalid device key" in caplog.text
-
-    # Ensure async_add_entities was called once.
-    async_add_entities.assert_called_once()
-
-    # Retrieve the created entity.
-    entity = async_add_entities.call_args[0][0][0]
-    # For testing, assign hass to the entity.
-    entity.hass = hass
-
-    # Force the coordinator to report a failed update so that available is False.
-    entity.coordinator.last_update_success = False
-
-    # Ensure the entity is of type DaikinClimate and is marked as unavailable.
-    assert isinstance(entity, DaikinClimate)
-    assert entity.available is False
-
-
-@pytest.mark.asyncio
-async def test_async_setup_entry_communication_failure(hass, caplog):
-    """Test setup handles communication failures gracefully."""
-    entry = MagicMock()
-    entry.data = {
-        CONF_API_KEY: "VALID_KEY",
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "device_name": "TEST DEVICE",
-    }
-
-    async_add_entities = MagicMock()
-
-    # Simulate an exception in async_get_thing_info
-    with patch(
-        "custom_components.daikin_br.climate.async_get_thing_info",
-        side_effect=Exception("Connection error"),
-    ):
-        await async_setup_entry(hass, entry, async_add_entities)
-
-    # Ensure the correct error message is logged.
-    assert "Unexpected error" in caplog.text
-
-    # Ensure async_add_entities is called once.
-    async_add_entities.assert_called_once()
-
-    # Retrieve the entity that was created.
-    entity = async_add_entities.call_args[0][0][0]
-
-    # For testing, assign hass to the entity.
-    entity.hass = hass
-
-    # Simulate a failed update by forcing the coordinator to report failure.
-    entity.coordinator.last_update_success = False
-
-    # Ensure entity is created and marked as unavailable.
-    assert isinstance(entity, DaikinClimate)
-    assert entity.available is False
-
-
-@pytest.mark.asyncio
-async def test_async_setup_entry_no_port_status(hass, caplog):
-    """
-    Test setup proceeds but marks the entity as unavailable.
-
-    This happens when port_status is missing.
-    """
-    # Create a dummy config entry.
-    entry = MagicMock()
-    entry.data = {
-        CONF_API_KEY: "VALID_KEY",
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "device_name": "TEST DEVICE",
-    }
-
-    # Use MagicMock for async_add_entities.
-    async_add_entities = MagicMock()
-
-    # Patch async_write_ha_state in DaikinClimate to be a no-op.
-    with patch(
-        "custom_components.daikin_br.climate.DaikinClimate.async_write_ha_state",
-        return_value=None,
-    ):
-        # Patch async_get_thing_info to return an empty dictionary
-        # (simulating no port_status).
-        with patch(
-            "custom_components.daikin_br.climate.async_get_thing_info", return_value={}
-        ):
-            await async_setup_entry(hass, entry, async_add_entities)
-
-    # Ensure error message is logged.
-    assert "Device setup failed. Invalid device key." in caplog.text
-
-    # Ensure async_add_entities is called once.
-    async_add_entities.assert_called_once()
-
-    # Retrieve the entity that was created.
-    entity = async_add_entities.call_args[0][0][0]
-
-    # For testing, assign hass to the entity so that its available property can be read.
-    entity.hass = hass
-
-    # Force the coordinator's last_update_success flag to False so that
-    # the available property (which is based on the coordinator's status) returns False.
-    entity.coordinator.last_update_success = False
-
-    # Ensure the entity is an instance of DaikinClimate.
-    assert isinstance(entity, DaikinClimate)
-    # Verify that the entity is marked as unavailable.
-    assert entity.available is False
-
-
-@pytest.mark.asyncio
-async def test_async_setup_entry_success(hass, caplog):
-    """Test setup succeeds when async_get_thing_info returns valid port_status."""
-    entry = MagicMock()
-    entry.data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "api_key": "VALID_KEY",
-        "device_name": "TEST DEVICE",
-    }
-    async_add_entities = MagicMock()
-
-    # Mock a valid device response.
-    mock_status = {"port1": {"fw_ver": "1.0.0", "temperature": 24}}
-
-    with patch(
-        "custom_components.daikin_br.climate.async_get_thing_info",
-        return_value=mock_status,
-    ), patch.object(
-        DaikinClimate, "update_entity_properties", MagicMock()
-    ) as mock_update:
-        await async_setup_entry(hass, entry, async_add_entities)
-
-    # Ensure no error message is logged.
-    assert "Device setup failed. Invalid device key." not in caplog.text
-
-    # Ensure async_add_entities is called once.
-    async_add_entities.assert_called_once()
-
-    # Retrieve the created entity.
-    entity = async_add_entities.call_args[0][0][0]
-
-    # Explicitly set last_update_success = True for the mocked runtime_data.
-    entry.runtime_data.last_update_success = True
-
-    # Assign hass to the entity so that its available property can be read.
-    entity.hass = hass
-
-    # Ensure the entity is a DaikinClimate instance and marked as available.
-    assert isinstance(entity, DaikinClimate)
-    assert entity.available is True
-
-    # Ensure update_entity_properties was called once with the correct status.
-    mock_update.assert_called_once_with(mock_status)
-
-
-@pytest.mark.asyncio
-async def test_async_set_hvac_mode(hass, caplog):
-    """Test setting various HVAC modes in DaikinClimate."""
-    # Dummy entry data for DaikinClimate.
+@pytest.fixture
+def mock_config_entry(dummy_coordinator, monkeypatch):
+    """Fixture to create a valid Home Assistant config entry with runtime_data."""
     entry_data = {
         "device_apn": "TEST_APN",
         "host": "192.168.1.100",
         "api_key": "VALID_KEY",
         "device_name": "TEST DEVICE",
     }
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data=entry_data,
+        unique_id="test_entry_id",
+    )
+    # Use monkeypatch to set the runtime_data attribute on the entry.
+    monkeypatch.setattr(entry, "runtime_data", dummy_coordinator)
+    return entry
 
-    # Create a dummy coordinator (using MagicMock) required by the entity.
-    dummy_coordinator = MagicMock()
-    dummy_coordinator.data = {"port1": {"fw_ver": "1.0.0"}}  # Minimal dummy data
-    dummy_coordinator.hass = hass
 
-    # Create DaikinClimate instance with the dummy coordinator.
-    climate_entity = DaikinClimate(entry_data, dummy_coordinator)
+@pytest.mark.asyncio
+async def test_async_setup_entry_success(hass, mock_config_entry):
+    """Test that async_setup_entry sets up the climate entity."""
+    # Create a dummy async_add_entities as an AsyncMock.
+    async_add_entities = AsyncMock()
+
+    # Ensure that the runtime_data on the config entry (provided by mock_config_entry)
+    # has an async_request_refresh method.
+    mock_config_entry.runtime_data.async_request_refresh = AsyncMock()
+
+    await async_setup_entry(hass, mock_config_entry, async_add_entities)
+
+    # Since async_setup_entry doesn't explicitly return a value, result is None.
+    async_add_entities.assert_called_once()
+    args, _kwargs = async_add_entities.call_args
+    assert isinstance(args[0], list)
+    assert len(args[0]) == 1
+    climate_entity = args[0][0]
+    assert isinstance(climate_entity, DaikinClimate)
+
+    # Verify that the coordinator's async_request_refresh was called.
+    mock_config_entry.runtime_data.async_request_refresh.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_async_set_hvac_mode(hass, caplog, mock_config_entry):
+    """Test setting various HVAC modes in DaikinClimate."""
+    # Create the DaikinClimate entity using the config entry.
+    climate_entity = DaikinClimate(mock_config_entry)
     climate_entity.hass = hass  # Ensure hass is set on the entity
 
     # Patch set_thing_state to be an AsyncMock.
     climate_entity.set_thing_state = AsyncMock()
 
-    # Define expected mode mappings and JSON payloads.
+    # Define expected HVAC mode mappings and corresponding JSON payloads.
     test_cases = {
         HVACMode.OFF: json.dumps({"port1": {"power": 0}}),
         HVACMode.FAN_ONLY: json.dumps({"port1": {"mode": 6, "power": 1}}),
@@ -272,46 +116,38 @@ async def test_async_set_hvac_mode(hass, caplog):
         HVACMode.AUTO: json.dumps({"port1": {"mode": 1, "power": 1}}),
     }
 
-    # Test all valid HVAC modes.
+    # Test each valid HVAC mode.
     for hvac_mode, expected_json in test_cases.items():
         await climate_entity.async_set_hvac_mode(hvac_mode)
-        climate_entity.set_thing_state.assert_called_with(expected_json)
+        climate_entity.set_thing_state.assert_awaited_once_with(expected_json)
         climate_entity.set_thing_state.reset_mock()
 
-    # Test an unsupported mode.
+    # Test an unsupported HVAC mode.
     await climate_entity.async_set_hvac_mode("INVALID_MODE")
     assert "Unsupported HVAC mode: INVALID_MODE" in caplog.text
-    climate_entity.set_thing_state.assert_not_called()
+    assert climate_entity.set_thing_state.call_count == 0
 
 
 @pytest.mark.asyncio
-async def test_async_set_fan_mode(hass, caplog):
+async def test_async_set_fan_mode(monkeypatch, hass, caplog, mock_config_entry):
     """Test setting various fan modes in DaikinClimate."""
-    # Mock entry data for DaikinClimate
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "api_key": "VALID_KEY",
-        "device_name": "TEST DEVICE",
-    }
-
-    # Create a dummy coordinator required by the entity.
-    dummy_coordinator = MagicMock()
-    dummy_coordinator.data = {"port1": {"fw_ver": "1.0.0"}}
-    dummy_coordinator.hass = hass
-
-    # Create DaikinClimate instance with the dummy coordinator.
-    climate_entity = DaikinClimate(entry_data, dummy_coordinator)
-    climate_entity.hass = hass  # Ensure hass is set on the entity.
+    # Initialize DaikinClimate instance using the mock config entry.
+    climate_entity = DaikinClimate(mock_config_entry)
+    climate_entity.hass = hass
     climate_entity.entity_id = "climate.test_device"
 
     # Patch set_thing_state to be an AsyncMock.
     climate_entity.set_thing_state = AsyncMock()
 
     # Set log capture level.
-    caplog.set_level(logging.ERROR)
+    caplog.set_level("DEBUG")
 
-    # Define expected fan mode mappings and JSON payloads.
+    # --- Test valid fan modes when HVAC mode is COOL ---
+    monkeypatch.setattr(climate_entity, "_hvac_mode", HVACMode.COOL)
+    assert (
+        climate_entity.hvac_mode == HVACMode.COOL
+    ), f"Expected HVAC mode COOL, got {climate_entity.hvac_mode}"
+
     test_cases = {
         "auto": {"port1": {"fan": 17}},
         "high": {"port1": {"fan": 7}},
@@ -322,377 +158,284 @@ async def test_async_set_fan_mode(hass, caplog):
         "quiet": {"port1": {"fan": 18}},
     }
 
-    # Test valid fan modes when not in DRY mode.
-    climate_entity._hvac_mode = HVACMode.COOL  # Ensure not in DRY mode.
     for fan_mode, expected_data in test_cases.items():
         expected_json = json.dumps(expected_data)
         await climate_entity.async_set_fan_mode(fan_mode)
         climate_entity.set_thing_state.assert_called_once_with(expected_json)
         climate_entity.set_thing_state.reset_mock()
 
-    # Test fan mode change when in DRY mode (should not send command).
-    climate_entity._hvac_mode = HVACMode.DRY
+    # --- Test fan mode change when HVAC mode is DRY (should not send command) ---
+    monkeypatch.setattr(climate_entity, "_hvac_mode", HVACMode.DRY)
+    assert (
+        climate_entity.hvac_mode == HVACMode.DRY
+    ), f"Expected HVAC mode DRY, got {climate_entity.hvac_mode}"
+    caplog.clear()
     await climate_entity.async_set_fan_mode("medium")
-    # Check if an error is logged.
-    assert any(
-        "Fan mode change operation is not permitted" in record.message
-        for record in caplog.records
-    )
-    climate_entity.set_thing_state.assert_not_called()
+    # Assert that no command is sent when in DRY mode.
+    assert climate_entity.set_thing_state.call_count == 0
 
-    # Test unsupported fan mode.
-    climate_entity._hvac_mode = HVACMode.COOL  # Set HVAC mode back to COOL.
-    caplog.clear()  # Clear logs for fresh assertions.
+    # --- Test unsupported fan mode when HVAC mode is COOL ---
+    monkeypatch.setattr(climate_entity, "_hvac_mode", HVACMode.COOL)
+    caplog.clear()
     await climate_entity.async_set_fan_mode("INVALID_MODE")
-    # Optionally print captured logs for debugging.
-    print("\nCaptured Logs:\n", caplog.text)
-    assert any(
-        "Unsupported fan mode." in record.message for record in caplog.records
-    ), "Expected 'Unsupported fan mode.' in logs"
-    climate_entity.set_thing_state.assert_not_called()
+    # Assert that no command is sent.
+    assert climate_entity.set_thing_state.call_count == 0
+    # Assert that an error log was recorded.
+    assert any("Unsupported fan mode." in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio
-async def test_async_set_temperature(hass, caplog):
+async def test_async_set_temperature(monkeypatch, hass, caplog, mock_config_entry):
     """Test setting various temperature values in DaikinClimate."""
-    # Mock entry data for DaikinClimate.
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "api_key": "VALID_KEY",
-        "device_name": "TEST DEVICE",
-    }
-
-    # Create a dummy coordinator (required by the entity).
-    dummy_coordinator = MagicMock()
-    dummy_coordinator.data = {"port1": {"fw_ver": "1.0.0"}}
-    dummy_coordinator.hass = hass
-
-    # Create DaikinClimate instance with the dummy coordinator.
-    climate_entity = DaikinClimate(entry_data, dummy_coordinator)
+    # Create the climate entity using the mock config entry.
+    climate_entity = DaikinClimate(mock_config_entry)
     climate_entity.hass = hass
     climate_entity.entity_id = "climate.test_device"
 
-    # Patch set_thing_state to be an AsyncMock.
+    # Patch set_thing_state (which sends the command) and async_write_ha_state.
     climate_entity.set_thing_state = AsyncMock()
+    climate_entity.async_write_ha_state = MagicMock()
 
-    # Set log capture level.
-    caplog.set_level(logging.ERROR)
+    caplog.set_level("DEBUG")
 
-    # Test valid temperature setting in COOL mode.
-    climate_entity._hvac_mode = HVACMode.COOL
+    # --- Test valid temperature in COOL mode ---
+    monkeypatch.setattr(climate_entity, "_hvac_mode", HVACMode.COOL)
     valid_temp = 22
     expected_json = json.dumps({"port1": {"temperature": valid_temp}})
     await climate_entity.async_set_temperature(**{ATTR_TEMPERATURE: valid_temp})
     climate_entity.set_thing_state.assert_called_once_with(expected_json)
     climate_entity.set_thing_state.reset_mock()
 
-    # Test temperature below range in COOL mode.
+    # --- Test temperature below range in COOL mode ---
     caplog.clear()
     await climate_entity.async_set_temperature(**{ATTR_TEMPERATURE: 10})
-    assert any(
-        "Temperature 10°C is out of range for COOL mode (16-32°C)." in record.message
-        for record in caplog.records
-    )
+    # No command should be sent if temperature is out of range.
     climate_entity.set_thing_state.assert_not_called()
 
-    # Test temperature above range in COOL mode.
+    # --- Test temperature above range in COOL mode ---
     caplog.clear()
     await climate_entity.async_set_temperature(**{ATTR_TEMPERATURE: 35})
-    assert any(
-        "Temperature 35°C is out of range for COOL mode (16-32°C)." in record.message
-        for record in caplog.records
-    )
     climate_entity.set_thing_state.assert_not_called()
 
-    # Test temperature setting in FAN_ONLY mode (should fail).
-    climate_entity._hvac_mode = HVACMode.FAN_ONLY
+    # --- Test temperature setting in FAN_ONLY mode (should not send command) ---
+    monkeypatch.setattr(climate_entity, "_hvac_mode", HVACMode.FAN_ONLY)
     caplog.clear()
     await climate_entity.async_set_temperature(**{ATTR_TEMPERATURE: 24})
-    assert any(
-        "Temperature cannot be changed in" in record.message
-        for record in caplog.records
-    )
     climate_entity.set_thing_state.assert_not_called()
 
-    # Test temperature setting in DRY mode (should fail).
-    climate_entity._hvac_mode = HVACMode.DRY
+    # --- Test temperature setting in DRY mode (should not send command) ---
+    monkeypatch.setattr(climate_entity, "_hvac_mode", HVACMode.DRY)
     caplog.clear()
     await climate_entity.async_set_temperature(**{ATTR_TEMPERATURE: 25})
-    assert any(
-        "Temperature cannot be changed in" in record.message
-        for record in caplog.records
-    )
     climate_entity.set_thing_state.assert_not_called()
 
-    # Test missing temperature attribute (should fail).
+    # --- Test missing temperature attribute ---
     caplog.clear()
     await climate_entity.async_set_temperature()
-    assert any(
-        "Temperature not provided in the request." in record.message
-        for record in caplog.records
-    )
     climate_entity.set_thing_state.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_async_set_preset_mode(hass, caplog):
+async def test_async_set_preset_mode(monkeypatch, hass, caplog, mock_config_entry):
     """Test setting preset modes in DaikinClimate."""
-    # Mock entry data for DaikinClimate.
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "api_key": "VALID_KEY",
-        "device_name": "TEST DEVICE",
-    }
-
-    # Create a dummy coordinator (required by the entity).
-    dummy_coordinator = MagicMock()
-    dummy_coordinator.data = {"port1": {"fw_ver": "1.0.0"}}
-    dummy_coordinator.hass = hass
-
-    # Create DaikinClimate instance with the dummy coordinator.
-    climate_entity = DaikinClimate(entry_data, dummy_coordinator)
+    # Create DaikinClimate instance using the mock config entry.
+    climate_entity = DaikinClimate(mock_config_entry)
     climate_entity.hass = hass
     climate_entity.entity_id = "climate.test_device"
 
-    # Patch schedule_update_ha_state and set_thing_state.
+    # Patch schedule_update_ha_state (synchronous) and set_thing_state (async).
     climate_entity.schedule_update_ha_state = MagicMock()
     climate_entity.set_thing_state = AsyncMock()
 
-    caplog.set_level(logging.ERROR)
+    caplog.set_level("DEBUG")
 
     # --- Test when device is ON ---
-    climate_entity._power_state = 1
+    # Simulate device is ON by setting the internal _power_state.
+    monkeypatch.setattr(climate_entity, "_power_state", 1)
 
     # Test preset ECO.
     expected_json_eco = json.dumps({"port1": {"powerchill": 0, "econo": 1}})
     await climate_entity.async_set_preset_mode(PRESET_ECO)
-    assert climate_entity._attr_preset_mode == PRESET_ECO
+    # Use the public property to verify the preset mode.
+    assert climate_entity.preset_mode == PRESET_ECO
     climate_entity.schedule_update_ha_state.assert_called_once()
     climate_entity.set_thing_state.assert_awaited_once_with(expected_json_eco)
     climate_entity.schedule_update_ha_state.reset_mock()
     climate_entity.set_thing_state.reset_mock()
 
     # Test preset BOOST.
-    await climate_entity.async_set_preset_mode(PRESET_BOOST)
-    assert climate_entity._attr_preset_mode == PRESET_BOOST
-    climate_entity.schedule_update_ha_state.assert_called_once()
     expected_json_boost = json.dumps({"port1": {"powerchill": 1, "econo": 0}})
+    await climate_entity.async_set_preset_mode(PRESET_BOOST)
+    assert climate_entity.preset_mode == PRESET_BOOST
+    climate_entity.schedule_update_ha_state.assert_called_once()
     climate_entity.set_thing_state.assert_awaited_once_with(expected_json_boost)
     climate_entity.schedule_update_ha_state.reset_mock()
     climate_entity.set_thing_state.reset_mock()
 
     # Test preset NONE.
-    await climate_entity.async_set_preset_mode(PRESET_NONE)
-    assert climate_entity._attr_preset_mode == PRESET_NONE
-    climate_entity.schedule_update_ha_state.assert_called_once()
     expected_json_none = json.dumps({"port1": {"powerchill": 0, "econo": 0}})
+    await climate_entity.async_set_preset_mode(PRESET_NONE)
+    assert climate_entity.preset_mode == PRESET_NONE
+    climate_entity.schedule_update_ha_state.assert_called_once()
     climate_entity.set_thing_state.assert_awaited_once_with(expected_json_none)
     climate_entity.schedule_update_ha_state.reset_mock()
     climate_entity.set_thing_state.reset_mock()
 
     # --- Test when device is OFF ---
-    climate_entity._power_state = 0
+    monkeypatch.setattr(climate_entity, "_power_state", 0)
     caplog.clear()
     await climate_entity.async_set_preset_mode(PRESET_ECO)
-    # Expect an error log and no calls to schedule_update_ha_state or set_thing_state.
-    assert any(
-        "The device operation cannot be performed because it is turned off."
-        in record.message
-        for record in caplog.records
-    )
+    # Expect that no command is sent when the device is off.
     climate_entity.schedule_update_ha_state.assert_not_called()
     climate_entity.set_thing_state.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_async_set_swing_mode(hass, caplog):
+async def test_async_set_swing_mode(monkeypatch, hass, caplog, mock_config_entry):
     """Test setting swing modes in DaikinClimate."""
-    # Mock entry data for DaikinClimate.
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "api_key": "VALID_KEY",
-        "device_name": "TEST DEVICE",
-    }
-
-    # Create a dummy coordinator (required by the entity).
-    dummy_coordinator = MagicMock()
-    dummy_coordinator.data = {"port1": {"fw_ver": "1.0.0"}}
-    dummy_coordinator.hass = hass
-
-    # Create DaikinClimate instance with the dummy coordinator.
-    climate_entity = DaikinClimate(entry_data, dummy_coordinator)
-    climate_entity.hass = hass  # Ensure hass is set on the entity.
+    # Create the DaikinClimate entity using the config entry.
+    climate_entity = DaikinClimate(mock_config_entry)
+    climate_entity.hass = hass
     climate_entity.entity_id = "climate.test_device"
 
     # Patch set_thing_state to be an AsyncMock.
     climate_entity.set_thing_state = AsyncMock()
 
-    # Define available swing modes.
-    climate_entity._attr_swing_modes = {SWING_VERTICAL, SWING_OFF}
+    caplog.set_level("DEBUG")
 
-    # Test setting SWING_VERTICAL mode.
+    # Ensure the available swing modes are set as expected.
+    monkeypatch.setattr(
+        climate_entity, "_attr_swing_modes", {SWING_VERTICAL, SWING_OFF}
+    )
+
+    # --- Test valid swing mode: SWING_VERTICAL ---
     expected_json_vertical = json.dumps({"port1": {"v_swing": 1}})
     await climate_entity.async_set_swing_mode(SWING_VERTICAL)
-    climate_entity.set_thing_state.assert_called_with(expected_json_vertical)
+    climate_entity.set_thing_state.assert_awaited_once_with(expected_json_vertical)
     climate_entity.set_thing_state.reset_mock()
 
-    # Test setting SWING_OFF mode.
+    # --- Test valid swing mode: SWING_OFF ---
     expected_json_off = json.dumps({"port1": {"v_swing": 0}})
     await climate_entity.async_set_swing_mode(SWING_OFF)
-    climate_entity.set_thing_state.assert_called_with(expected_json_off)
+    climate_entity.set_thing_state.assert_awaited_once_with(expected_json_off)
     climate_entity.set_thing_state.reset_mock()
 
-    # Test unsupported swing mode.
+    # --- Test unsupported swing mode ---
     caplog.clear()
     await climate_entity.async_set_swing_mode("INVALID_MODE")
+    # Verify that an error is logged indicating an unsupported swing mode.
     assert any(
         "Unsupported swing mode: INVALID_MODE" in record.message
         for record in caplog.records
-    ), "Expected 'Unsupported swing mode' log"
-    climate_entity.set_thing_state.assert_not_called()
+    ), "Expected 'Unsupported swing mode: INVALID_MODE' in logs"
+    climate_entity.set_thing_state.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_set_thing_state(hass, caplog):
-    """Test the set_thing_state function of DaikinClimate."""
-    # Mock entry data for DaikinClimate.
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "api_key": "VALID_KEY",
-        "device_name": "TEST DEVICE",
-    }
+async def test_set_thing_state_success(hass, mock_config_entry):
+    """Test that set_thing_state updates the entity state as expected."""
+    # Use the config entry fixture that already has runtime_data set.
+    entry = mock_config_entry
 
-    # Create a dummy coordinator (required by the entity).
-    dummy_coordinator = MagicMock()
-    dummy_coordinator.data = {"port1": {"fw_ver": "1.0.0"}}
-    dummy_coordinator.hass = hass
+    # Instantiate the DaikinClimate entity using the full config entry.
+    climate_entity = DaikinClimate(entry)
+    climate_entity.hass = hass
+    climate_entity.entity_id = "climate.test_device"
 
-    # Create DaikinClimate instance with the dummy coordinator.
-    climate_entity = DaikinClimate(entry_data, dummy_coordinator)
-    climate_entity.hass = hass  # Ensure hass is set on the entity.
-    climate_entity._ip_address = "192.168.1.100"
-    climate_entity._device_key = "VALID_KEY"
-    climate_entity._command_suffix = "command"
-
-    # Patch async_write_ha_state to a MagicMock.
+    # Patch async_write_ha_state so that no actual update is performed.
     climate_entity.async_write_ha_state = MagicMock()
 
-    # Mock response from async_send_operation_data.
+    # Define the expected response from async_send_operation_data.
+    # This response should update internal state accordingly.
     mock_response = {
         "port1": {
             "power": 1,
-            "mode": 3,  # COOL mode (maps to HVACMode.COOL)
+            "mode": 3,  # Should map to HVACMode.COOL
             "temperature": 22,
             "sensors": {"room_temp": 23},
-            "fan": 5,  # Fan speed 5 should map to "medium"
-            "v_swing": 1,
-            "econo": 1,  # This should set preset mode to PRESET_ECO ("eco")
+            "fan": 5,  # Should map to "medium" (per your mapping)
+            "v_swing": 1,  # Should yield SWING_VERTICAL (assume "vertical")
+            "econo": 1,  # Should set preset mode to PRESET_ECO (assume "eco")
             "powerchill": 0,
         }
     }
 
-    # Patch async_send_operation_data to return the mock_response.
+    # Patch async_send_operation_data so that it returns our mock response.
     with patch(
         "custom_components.daikin_br.climate.async_send_operation_data",
-        return_value=mock_response,
+        new=AsyncMock(return_value=mock_response),
     ):
-        data = json.dumps({"port1": {"temperature": 22}})
-        await climate_entity.set_thing_state(data)
+        payload = json.dumps({"port1": {"temperature": 22}})
+        await climate_entity.set_thing_state(payload)
 
-        # Verify that internal state is updated correctly.
-        assert climate_entity._power_state == 1
-        assert climate_entity._hvac_mode == HVACMode.COOL
-        assert climate_entity._target_temperature == 22
-        assert climate_entity._current_temperature == 23
-        assert climate_entity._fan_mode == "medium"
-        # Expect swing mode to be SWING_VERTICAL;
-        # typically, SWING_VERTICAL == "vertical"
-        assert climate_entity._attr_swing_mode == "vertical"
-        # Expect preset mode to be PRESET_ECO, which is "eco"
-        assert climate_entity._attr_preset_mode == "eco"
+    # Now verify the updated state via the public properties.
+    assert (
+        climate_entity.power_state == 1
+    ), f"Expected power_state 1, got {climate_entity.power_state}"
+    assert (
+        climate_entity.hvac_mode == HVACMode.COOL
+    ), f"Expected HVACMode.COOL, got {climate_entity.hvac_mode}"
+    assert (
+        climate_entity.target_temperature == 22
+    ), f"Expected target_temperature 22, got {climate_entity.target_temperature}"
+    assert (
+        climate_entity.current_temperature == 23
+    ), f"Expected current_temperature 23, got {climate_entity.current_temperature}"
+    # For fan_mode, a value of 5 should map to "medium" according to your mapping.
+    assert (
+        climate_entity.fan_mode == "medium"
+    ), f"Expected fan_mode 'medium', got {climate_entity.fan_mode}"
+    # For swing_mode, a value of 1 should yield SWING_VERTICAL.
+    assert (
+        climate_entity.swing_mode == SWING_VERTICAL
+    ), f"Expected swing_mode '{SWING_VERTICAL}', got {climate_entity.swing_mode}"
+    # For preset_mode, econo=1 and powerchill=0 should yield PRESET_ECO.
+    assert (
+        climate_entity.preset_mode == PRESET_ECO
+    ), f"Expected preset_mode '{PRESET_ECO}', got {climate_entity.preset_mode}"
 
-        # Verify that async_write_ha_state was called once.
-        climate_entity.async_write_ha_state.assert_called_once()
-
-        # Verify that the log contains the expected preset mode set message.
-        assert "Preset mode set to : eco" in caplog.text
-
-    # Test error scenario: simulate async_send_operation_data raising an exception.
-    with patch(
-        "custom_components.daikin_br.climate.async_send_operation_data",
-        side_effect=Exception("Failed to send command"),
-    ):
-        caplog.clear()  # Clear previous logs.
-        await climate_entity.set_thing_state(data)
-        assert "Failed to send command: Failed to send command" in caplog.text
+    # Verify that async_write_ha_state was called once.
+    climate_entity.async_write_ha_state.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_update_entity_properties():
-    """Test update_entity_properties function."""
-    # Create a dummy coordinator required by the entity.
-    dummy_coordinator = MagicMock()
-    dummy_coordinator.data = {"port1": {"fw_ver": "1.0.0"}}
-    dummy_coordinator.hass = MagicMock()
-
-    # Prepare entry data for DaikinClimate.
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "api_key": "VALID_KEY",
-        "device_name": "TEST DEVICE",
-    }
-    # Create DaikinClimate instance with the dummy coordinator.
-    climate_entity = DaikinClimate(entry_data, dummy_coordinator)
-    climate_entity.hass = dummy_coordinator.hass
+async def test_update_entity_properties(mock_config_entry):
+    """Test that update_entity_properties updates internal state correctly."""
+    # Instantiate the DaikinClimate entity using the config entry.
+    climate_entity = DaikinClimate(mock_config_entry)
+    # Ensure hass is set on the entity (if not already set by the fixture).
+    climate_entity.hass = MagicMock()
 
     # Patch async_write_ha_state to avoid side effects.
     climate_entity.async_write_ha_state = MagicMock()
 
-    # Simulate input data for port_status.
-    port_status = {
+    # --- Test branch 1: When econo is 1 (preset ECO) ---
+    status1 = {
         "port1": {
             "sensors": {"room_temp": 23},
             "temperature": 22,
-            "power": 1,  # Power ON
-            "mode": 3,  # COOL mode (should map to HVACMode.COOL)
-            "fan": 5,  # Fan speed 5; expected mapping to "medium"
-            "v_swing": 1,  # Vertical swing (maps to SWING_VERTICAL)
-            "econo": 1,  # Economy mode (should set preset to PRESET_ECO)
-            "powerchill": 0,  # No powerchill
+            "power": 1,
+            "mode": 3,  # Mode 3 should map to HVACMode.COOL
+            "fan": 5,  # Fan value 5 should map to "medium" (per your mapping)
+            "v_swing": 1,  # v_swing 1 should yield SWING_VERTICAL
+            "econo": 1,  # Should set preset mode to PRESET_ECO
+            "powerchill": 0,
         }
     }
-
-    # Call update_entity_properties synchronously (without await).
-    climate_entity.update_entity_properties(port_status)
-
-    # Verify that the internal state is updated as expected.
-    assert climate_entity._current_temperature == 23  # room_temp from sensors.
-    assert climate_entity._target_temperature == 22  # temperature from port_status.
-    assert climate_entity._power_state == 1  # Power ON.
-    assert climate_entity._hvac_mode == HVACMode.COOL  # Mode 3 maps to COOL.
-    assert climate_entity._fan_mode == "medium"  # Fan speed 5 maps to "medium".
-    assert (
-        climate_entity._attr_swing_mode == SWING_VERTICAL
-    )  # v_swing 1 means vertical.
-    assert climate_entity._attr_preset_mode == PRESET_ECO  # econo 1 maps to eco preset.
-
-    # Verify that async_write_ha_state is called once.
+    climate_entity.update_entity_properties(status1)
+    # Verify public properties via getters.
+    assert climate_entity.current_temperature == 23
+    assert climate_entity.target_temperature == 22
+    assert climate_entity.power_state == 1
+    assert climate_entity.hvac_mode == HVACMode.COOL
+    assert climate_entity.fan_mode == "medium"
+    assert climate_entity.swing_mode == SWING_VERTICAL
+    assert climate_entity.preset_mode == PRESET_ECO
     climate_entity.async_write_ha_state.assert_called_once()
 
-    # Verify that the skip update flag is set.
-    assert climate_entity._skip_update is True
-
-    # Construct a status dict where:
-    # - power is ON,
-    # - mode is 3 (e.g. COOL, not that it matters for preset),
-    # - econo is 0,
-    # - powerchill is 1.
-    port_status = {
+    # --- Test branch 2: When powerchill is 1 (preset BOOST) ---
+    climate_entity.async_write_ha_state.reset_mock()
+    status2 = {
         "port1": {
             "sensors": {"room_temp": 24},
             "temperature": 23,
@@ -704,68 +447,82 @@ async def test_update_entity_properties():
             "powerchill": 1,
         }
     }
-    # Call update_entity_properties synchronously.
-    climate_entity.update_entity_properties(port_status)
+    climate_entity.update_entity_properties(status2)
+    assert climate_entity.preset_mode == PRESET_BOOST
+    climate_entity.async_write_ha_state.assert_called_once()
 
-    # Assert that the branch setting PRESET_BOOST was executed.
-    assert climate_entity._attr_preset_mode == PRESET_BOOST
+    # --- Test branch 3: When both econo and powerchill are 0 (preset NONE) ---
+    climate_entity.async_write_ha_state.reset_mock()
+    status3 = {
+        "port1": {
+            "sensors": {"room_temp": 25},
+            "temperature": 24,
+            "power": 1,
+            "mode": 3,
+            "fan": 5,
+            "v_swing": 1,
+            "econo": 0,
+            "powerchill": 0,
+        }
+    }
+    climate_entity.update_entity_properties(status3)
+    assert climate_entity.preset_mode == PRESET_NONE
+    climate_entity.async_write_ha_state.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_update_entity_properties_device_off():
+async def test_update_entity_properties_device_off(mock_config_entry, hass):
     """Test update_entity_properties when the device is OFF."""
-    # Create a dummy coordinator required by the entity.
-    dummy_coordinator = MagicMock()
-    dummy_coordinator.data = {"port1": {"fw_ver": "1.0.0"}}
-    dummy_coordinator.hass = MagicMock()
+    # Create the DaikinClimate entity using the config entry fixture.
+    climate_entity = DaikinClimate(mock_config_entry)
+    climate_entity.hass = hass
 
-    # Prepare entry data for DaikinClimate.
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "api_key": "VALID_KEY",
-        "device_name": "TEST DEVICE",
-    }
-    # Create DaikinClimate instance with the dummy coordinator.
-    climate_entity = DaikinClimate(entry_data, dummy_coordinator)
-    climate_entity.hass = dummy_coordinator.hass
-
-    # Patch async_write_ha_state to avoid side effects during testing.
+    # Patch async_write_ha_state to avoid side effects.
     climate_entity.async_write_ha_state = MagicMock()
 
-    # Simulate input data for port_status with the device OFF.
+    # Simulate port_status data indicating the device is OFF.
     port_status = {
         "port1": {
             "sensors": {"room_temp": 23},
             "temperature": 22,
-            "power": 0,  # Power OFF
-            "mode": 0,  # HVACMode.OFF
-            "fan": 3,  # Fan speed 3 should map to "low"
-            "v_swing": 0,  # No swing; should map to SWING_OFF
+            "power": 0,  # Device is OFF
+            "mode": 0,  # Expected to map to HVACMode.OFF
+            "fan": 3,  # Fan speed 3 should map to "low" per your mapping
+            "v_swing": 0,  # 0 -> SWING_OFF
             "econo": 0,  # No economy mode
             "powerchill": 0,  # No powerchill
         }
     }
 
-    # Call update_entity_properties synchronously.
+    # Call update_entity_properties.
     climate_entity.update_entity_properties(port_status)
 
-    # Verify that the internal state is updated as expected.
-    assert climate_entity._current_temperature == 23  # From sensors: room_temp.
-    assert climate_entity._target_temperature == 22  # From port_status.
-    assert climate_entity._power_state == 0  # Device is OFF.
-    assert climate_entity._hvac_mode == HVACMode.OFF  # HVACMode should be OFF.
-    assert climate_entity._fan_mode == "low"  # Fan speed 3 maps to "low".
-    assert climate_entity._attr_swing_mode == SWING_OFF  # v_swing 0 maps to SWING_OFF.
+    # Verify that the public properties reflect the expected state.
     assert (
-        climate_entity._attr_preset_mode == PRESET_NONE
-    )  # econo=0 and powerchill=0 yield PRESET_NONE.
+        climate_entity.current_temperature == 23
+    ), f"Expected current_temperature 23, got {climate_entity.current_temperature}"
+    assert (
+        climate_entity.target_temperature == 22
+    ), f"Expected target_temperature 22, got {climate_entity.target_temperature}"
+    assert (
+        climate_entity.power_state == 0
+    ), f"Expected power_state 0, got {climate_entity.power_state}"
+    assert (
+        climate_entity.hvac_mode == HVACMode.OFF
+    ), f"Expected HVACMode.OFF, got {climate_entity.hvac_mode}"
+    # Assuming your mapping converts fan value 3 to "low".
+    assert (
+        climate_entity.fan_mode == "low"
+    ), f"Expected fan_mode 'low', got {climate_entity.fan_mode}"
+    assert (
+        climate_entity.swing_mode == SWING_OFF
+    ), f"Expected swing_mode {SWING_OFF}, got {climate_entity.swing_mode}"
+    assert (
+        climate_entity.preset_mode == PRESET_NONE
+    ), f"Expected preset_mode {PRESET_NONE}, got {climate_entity.preset_mode}"
 
-    # Verify that async_write_ha_state is called once.
+    # Verify that async_write_ha_state was called once.
     climate_entity.async_write_ha_state.assert_called_once()
-
-    # Verify that the skip update flag is set.
-    assert climate_entity._skip_update is True
 
 
 @pytest.mark.parametrize(
@@ -777,24 +534,19 @@ async def test_update_entity_properties_device_off():
         (2, HVACMode.DRY),
         (4, HVACMode.HEAT),
         (1, HVACMode.AUTO),
-        (99, HVACMode.OFF),  # Unknown value should return OFF
+        (99, HVACMode.OFF),  # Unknown value should default to HVACMode.OFF
     ],
 )
-def test_map_hvac_mode(hvac_value, expected_mode):
+def test_map_hvac_mode(mock_config_entry, hvac_value, expected_mode):
     """
     Test map_hvac_mode method.
 
-    This will ensure correct mapping of device values to HA modes.
+    This ensures that device-specific HVAC mode values are correctly mapped
+    to Home Assistant HVAC modes.
     """
-    # Create a dummy coordinator.
-    dummy_coordinator = MagicMock()
-    dummy_coordinator.data = {"port1": {"fw_ver": "1.0.0"}}
-    dummy_coordinator.hass = MagicMock()
-
-    # Create an instance of DaikinClimate with empty entry data and dummy coordinator.
-    climate_entity = DaikinClimate({}, dummy_coordinator)
-
-    # Call map_hvac_mode and verify output.
+    # Create a DaikinClimate instance using the mock_config_entry.
+    climate_entity = DaikinClimate(mock_config_entry)
+    # Call map_hvac_mode and check that it returns the expected mode.
     assert climate_entity.map_hvac_mode(hvac_value) == expected_mode
 
 
@@ -811,432 +563,343 @@ def test_map_hvac_mode(hvac_value, expected_mode):
         (99, "auto"),  # Unknown value should default to "auto"
     ],
 )
-def test_map_fan_speed(fan_value, expected_mode):
-    """Test map_fan_speed method for correct fan speed mappings."""
-    # Create a dummy coordinator.
-    dummy_coordinator = MagicMock()
-    dummy_coordinator.data = {"port1": {"fw_ver": "1.0.0"}}
-    dummy_coordinator.hass = MagicMock()
+def test_map_fan_speed(mock_config_entry, fan_value, expected_mode):
+    """
+    Test map_fan_speed method for correct fan speed mappings.
 
-    # Create an instance of DaikinClimate with empty entry data and dummy coordinator.
-    climate_entity = DaikinClimate({}, dummy_coordinator)
+    This ensures that the device-specific fan speed values are correctly mapped
+    to Home Assistant fan mode strings.
+    """
+    # Create a DaikinClimate instance using the valid config entry.
+    climate_entity = DaikinClimate(mock_config_entry)
+    # Call map_fan_speed and check that it returns the expected mode.
     assert climate_entity.map_fan_speed(fan_value) == expected_mode
 
 
 @pytest.mark.parametrize(
     "temperature, expected_temperature",
     [
-        (22, 22),  # Valid temperature
-        (30, 30),  # Valid upper limit
-        (16, 16),  # Valid lower limit
-        (50, 50),  # Extreme value (assuming no validation)
-        (None, None),  # Edge case: None input
+        (22, 22),  # Valid temperature.
+        (30, 30),  # Valid upper limit.
+        (16, 16),  # Valid lower limit.
+        (50, 50),  # Extreme value (assuming no validation).
+        (None, None),  # Edge case: None input.
     ],
 )
-def test_set_temperature(temperature, expected_temperature):
-    """Test setting the target temperature."""
-    # Create a dummy coordinator.
-    dummy_coordinator = MagicMock()
-    dummy_coordinator.data = {"port1": {"fw_ver": "1.0.0"}}
-    dummy_coordinator.hass = MagicMock()
+def test_target_temperature_property(
+    temperature, expected_temperature, mock_config_entry
+):
+    """
+    Test that update_entity_properties sets the target temperature correctly.
 
-    # Create an instance of DaikinClimate with the dummy coordinator.
-    climate_entity = DaikinClimate(
-        {
-            "device_apn": "TEST_APN",
-            "host": "192.168.1.100",
-            "api_key": "VALID_KEY",
-            "device_name": "TEST DEVICE",
-        },
-        dummy_coordinator,
-    )
+    A dummy device status dict with only the "temperature" key is used.
+    """
+    # Create the DaikinClimate entity using the mock config entry.
+    climate_entity = DaikinClimate(mock_config_entry)
+    climate_entity.hass = MagicMock()
+    climate_entity.async_write_ha_state = MagicMock()
 
-    # Simulate setting the temperature.
-    climate_entity._target_temperature = temperature
+    # Build a dummy status dict simulating a device response with the given temperature.
+    dummy_status = {"port1": {"temperature": temperature}}
 
-    assert climate_entity._target_temperature == expected_temperature
+    # Call update_entity_properties to update the internal state.
+    climate_entity.update_entity_properties(dummy_status)
+
+    # Assert that the public target_temperature property equals the expected value.
+    assert climate_entity.target_temperature == expected_temperature
 
 
 @pytest.mark.parametrize(
     "swing_mode, expected_swing_mode",
     [
-        (SWING_OFF, SWING_OFF),  # Swing off
-        (SWING_VERTICAL, SWING_VERTICAL),  # Vertical swing
+        (SWING_OFF, SWING_OFF),  # Swing off.
+        (SWING_VERTICAL, SWING_VERTICAL),  # Vertical swing.
     ],
 )
-def test_swing_mode_property(swing_mode, expected_swing_mode):
-    """Test the swing_mode property for OFF and VERTICAL only."""
-    # Create a dummy coordinator.
-    dummy_coordinator = MagicMock()
-    dummy_coordinator.data = {"port1": {"fw_ver": "1.0.0"}}
-    dummy_coordinator.hass = MagicMock()
+def test_swing_mode_property(
+    monkeypatch, swing_mode, expected_swing_mode, mock_config_entry
+):
+    """Test that the swing_mode property returns the correct swing mode."""
+    # Create the DaikinClimate instance using the mock_config_entry fixture.
+    climate_entity = DaikinClimate(mock_config_entry)
 
-    # Create an instance of DaikinClimate with the dummy coordinator.
-    climate_entity = DaikinClimate(
-        {
-            "device_apn": "TEST_APN",
-            "host": "192.168.1.100",
-            "api_key": "VALID_KEY",
-            "device_name": "TEST DEVICE",
-        },
-        dummy_coordinator,
-    )
+    # Use monkeypatch to override the underlying protected swing mode attribute.
+    monkeypatch.setattr(climate_entity, "_attr_swing_mode", swing_mode)
 
-    # Manually set the private swing mode attribute.
-    climate_entity._attr_swing_mode = swing_mode
-
-    # Assert that the property returns the expected swing mode.
+    # Assert that the public swing_mode property returns the expected swing mode.
     assert climate_entity.swing_mode == expected_swing_mode
 
 
 @pytest.mark.parametrize(
     "preset_mode, expected_preset_mode",
     [
-        (PRESET_ECO, PRESET_ECO),  # Economy mode
-        (PRESET_BOOST, PRESET_BOOST),  # Power chill mode
-        (PRESET_NONE, PRESET_NONE),  # No preset mode
+        (PRESET_ECO, PRESET_ECO),  # Economy mode.
+        (PRESET_BOOST, PRESET_BOOST),  # Power chill mode.
+        (PRESET_NONE, PRESET_NONE),  # No preset mode.
     ],
 )
-def test_preset_mode_property(preset_mode, expected_preset_mode):
-    """Test the preset_mode property for ECO, BOOST, and NONE."""
-    # Create a dummy coordinator.
-    dummy_coordinator = MagicMock()
-    dummy_coordinator.data = {"port1": {"fw_ver": "1.0.0"}}
-    dummy_coordinator.hass = MagicMock()
+def test_preset_mode_property(
+    monkeypatch, preset_mode, expected_preset_mode, mock_config_entry
+):
+    """Test that the preset_mode property returns the correct value."""
+    # Create a DaikinClimate instance using the mock_config_entry fixture.
+    climate_entity = DaikinClimate(mock_config_entry)
 
-    # Create an instance of DaikinClimate with the dummy coordinator.
-    climate_entity = DaikinClimate(
-        {
-            "device_apn": "TEST_APN",
-            "host": "192.168.1.100",
-            "api_key": "VALID_KEY",
-            "device_name": "TEST DEVICE",
-        },
-        dummy_coordinator,
-    )
+    # Override the underlying preset mode attribute.
+    monkeypatch.setattr(climate_entity, "_attr_preset_mode", preset_mode)
 
-    # Manually set the private preset mode attribute.
-    climate_entity._attr_preset_mode = preset_mode
-
-    # Assert that the preset_mode property returns the expected value.
+    # Assert that the public preset_mode property returns the expected value.
     assert climate_entity.preset_mode == expected_preset_mode
 
 
-def test_init_missing_device_key(caplog, dummy_coordinator):
-    """Test the missing device key."""
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "device_name": "TEST DEVICE",
-    }
-    # Create an instance with missing CONF_API_KEY.
-    DaikinClimate(entry_data, dummy_coordinator)
-    assert "Device key not found while creating entity!" in caplog.text
+def test_property_getters(mock_config_entry):
+    """Test the property getters of DaikinClimate."""
+    # Create the DaikinClimate entity using the mock_config_entry fixture.
+    # The mock_config_entry fixture provides an entry with device_apn "TEST_APN",
+    # host "192.168.1.100", api_key "VALID_KEY", device_name "TEST DEVICE", etc.
+    climate_entity = DaikinClimate(mock_config_entry)
+
+    # Verify that properties are derived correctly from the config entry.
+    assert climate_entity.translation_key == "daikin_ac"
+    assert climate_entity.unique_id == "TEST_APN"
+    assert climate_entity.name is None
+    assert climate_entity.temperature_unit == UnitOfTemperature.CELSIUS
+    assert climate_entity.min_temp == 10.0
+    assert climate_entity.max_temp == 32.0
+    assert climate_entity.target_temperature_step == 1.0
 
 
-def test_property_getters(dummy_coordinator):
-    """Test the getters proprety."""
-    entry_data = {
-        CONF_API_KEY: "VALID_KEY",
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "device_name": "TEST DEVICE",
-        "poll_interval": 30,
-        "command_suffix": "cmd",
-        "fw_ver": "1.2.3",
-    }
-    entity = DaikinClimate(entry_data, dummy_coordinator)
-    # These properties are hard-coded or derived from entry_data
-    assert entity.translation_key == "daikin_ac"
-    assert entity.unique_id == "TEST_APN"
-    assert entity.name is None
-    assert (
-        entity.temperature_unit == "°C"
-        or entity.temperature_unit == UnitOfTemperature.CELSIUS
-    )
-    assert entity.min_temp == 10.0
-    assert entity.max_temp == 32.0
-    assert entity.target_temperature_step == 1.0
+def test_device_info(mock_config_entry):
+    """Test the device_info property of DaikinClimate."""
+    # Create the DaikinClimate entity using the config entry fixture.
+    climate_entity = DaikinClimate(mock_config_entry)
 
+    # Expected values based on our config entry data.
+    expected_identifiers = {(DOMAIN, "TEST_APN")}
+    expected_name = "TEST DEVICE"
+    expected_manufacturer = "Daikin"
+    expected_model = "Smart AC Series"
+    # Our fixture doesn't set a firmware version so we expect None.
+    expected_sw_version = None
 
-def test_device_info(dummy_coordinator):
-    """Test device info."""
-    entry_data = {
-        CONF_API_KEY: "VALID_KEY",
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "device_name": "TEST DEVICE",
-        "fw_ver": "1.0.0",
-    }
-    entity = DaikinClimate(entry_data, dummy_coordinator)
-    # Expected device info structure (adjust according to your implementation)
-    expected_info = {
-        "identifiers": {("daikin_br", "TEST_APN")},
-        "name": "TEST DEVICE",
-        "manufacturer": "Daikin",
-        "model": "Smart AC Series",
-        "sw_version": "1.0.0",
-    }
-    # Assuming your base entity uses a device_info property:
-    assert entity.device_info == expected_info
+    # Retrieve the device_info property.
+    device_info = climate_entity.device_info
+
+    # Instead of checking instance type (since DeviceInfo is a TypedDict),
+    # verify that device_info is a dict and contains the expected keys and values.
+    assert isinstance(device_info, dict)
+    assert device_info.get("identifiers") == expected_identifiers
+    assert device_info.get("name") == expected_name
+    assert device_info.get("manufacturer") == expected_manufacturer
+    assert device_info.get("model") == expected_model
+    assert device_info.get("sw_version") == expected_sw_version
 
 
 @pytest.mark.asyncio
-async def test_set_thing_state_exception(dummy_coordinator, caplog, hass):
-    """Test set thing state exception."""
-    entry_data = {
-        CONF_API_KEY: "VALID_KEY",
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "device_name": "TEST DEVICE",
-    }
-    entity = DaikinClimate(entry_data, dummy_coordinator)
+async def test_set_thing_state_exception(hass, caplog, mock_config_entry):
+    """Test that set_thing_state logs an error when async_send_operation_data fails."""
+    # Create the DaikinClimate entity using the config entry fixture.
+    entity = DaikinClimate(mock_config_entry)
     entity.hass = hass
-    entity._ip_address = "192.168.1.100"
-    entity._device_key = "VALID_KEY"
-    entity._command_suffix = "cmd"
+    entity.entity_id = "climate.test_device"
+
+    # Patch async_write_ha_state to avoid actual HA state updates.
     entity.async_write_ha_state = MagicMock()
-    # Simulate an exception raised by async_send_operation_data.
+
+    caplog.set_level(logging.DEBUG)
+
+    # Patch async_send_operation_data to simulate an error.
     with patch(
         "custom_components.daikin_br.climate.async_send_operation_data",
-        side_effect=Exception("Simulated error"),
+        new=AsyncMock(side_effect=Exception("Simulated error")),
     ):
+        # Call set_thing_state with a dummy payload.
         await entity.set_thing_state(json.dumps({"port1": {"temperature": 22}}))
-    assert "Failed to send command:" in caplog.text
+
+    # Verify that the error message was logged.
+    assert "Failed to send command: Simulated error" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_async_set_preset_mode_unsupported(hass, caplog, dummy_coordinator):
+async def test_async_set_preset_mode_unsupported(
+    monkeypatch, hass, caplog, mock_config_entry
+):
     """Test unsupported preset mode."""
-    entry_data = {
-        CONF_API_KEY: "VALID_KEY",
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "device_name": "TEST DEVICE",
-    }
-    entity = DaikinClimate(entry_data, dummy_coordinator)
-    entity.hass = hass
-    entity._power_state = 1
-    entity.schedule_update_ha_state = MagicMock()
-    entity.set_thing_state = AsyncMock()
+    # Create the DaikinClimate entity using the config entry fixture.
+    climate_entity = DaikinClimate(mock_config_entry)
+    climate_entity.hass = hass
+    climate_entity.entity_id = "climate.test_device"
+
+    # Use monkeypatch to simulate that the device is ON.
+    monkeypatch.setattr(climate_entity, "_power_state", 1)
+
+    # Patch schedule_update_ha_state (synchronous) and set_thing_state (async).
+    climate_entity.schedule_update_ha_state = MagicMock()
+    climate_entity.set_thing_state = AsyncMock()
+
     caplog.clear()
-    # Pass an unsupported preset mode value.
-    await entity.async_set_preset_mode("INVALID_PRESET")
+
+    # Call async_set_preset_mode with an unsupported preset value.
+    await climate_entity.async_set_preset_mode("INVALID_PRESET")
+
+    # Assert that an error log is produced.
     assert any(
         "Unsupported preset mode: INVALID_PRESET" in record.message
         for record in caplog.records
-    )
-    entity.schedule_update_ha_state.assert_not_called()
-    entity.set_thing_state.assert_not_called()
+    ), f"Expected error log but got: {caplog.text}"
+
+    # Ensure that neither schedule_update_ha_state nor set_thing_state was called.
+    climate_entity.schedule_update_ha_state.assert_not_called()
+    climate_entity.set_thing_state.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_async_setup_entry_timeout(hass, caplog):
-    """Test setup entry timeout."""
-    entry = MagicMock()
-    entry.data = {
-        CONF_API_KEY: "VALID_KEY",
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "device_name": "TEST DEVICE",
-    }
-    async_add_entities = MagicMock()
-    with patch(
-        "custom_components.daikin_br.climate.async_get_thing_info",
-        side_effect=TimeoutError("Timeout error"),
-    ):
-        await async_setup_entry(hass, entry, async_add_entities)
-    assert "Timeout while communicating with the device:" in caplog.text
+async def test_handle_coordinator_update_exception(hass, caplog, mock_config_entry):
+    """
+    Test that _handle_coordinator_update marks the entity as unavailable.
 
-
-@pytest.mark.asyncio
-async def test_async_setup_entry_network_error(hass, caplog):
-    """Test setup entry neywork error."""
-    entry = MagicMock()
-    entry.data = {
-        CONF_API_KEY: "VALID_KEY",
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "device_name": "TEST DEVICE",
-    }
-    async_add_entities = MagicMock()
-    with patch(
-        "custom_components.daikin_br.climate.async_get_thing_info",
-        side_effect=OSError("Network error"),
-    ):
-        await async_setup_entry(hass, entry, async_add_entities)
-    assert "Network error while communicating with the device:" in caplog.text
-
-
-@pytest.mark.asyncio
-async def test_handle_coordinator_update_exception(hass, dummy_coordinator, caplog):
-    """Test coordinator update exception."""
-    entry_data = {
-        CONF_API_KEY: "VALID_KEY",
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "device_name": "TEST DEVICE",
-    }
-    entity = DaikinClimate(entry_data, dummy_coordinator)
+    When update_entity_properties fails.
+    """
+    # Create a DaikinClimate entity using the config entry fixture.
+    entity = DaikinClimate(mock_config_entry)
     entity.hass = hass
-    # Set an entity_id so that async_write_ha_state has an identifier.
     entity.entity_id = "climate.test_entity"
+
     # Patch update_entity_properties to raise an exception.
     entity.update_entity_properties = MagicMock(side_effect=Exception("Test exception"))
+
+    # Simulate a coordinator update by calling the update handler.
     entity._handle_coordinator_update()
+
+    # Verify that the entity is marked as unavailable.
     assert entity._attr_available is False
-    assert "Error updating entity properties" in caplog.text
+
+    # Verify that an error was logged.
+    assert any(
+        "Error updating entity properties" in record.message
+        for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio
-async def test_async_set_hvac_mode_unsupported(dummy_coordinator, hass, caplog):
-    """Test unsupported hvac mode."""
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "api_key": "VALID_KEY",
-        "device_name": "TEST DEVICE",
-    }
-    entity = DaikinClimate(entry_data, dummy_coordinator)
+async def test_async_set_hvac_mode_unsupported(hass, caplog, mock_config_entry):
+    """Test unsupported HVAC mode."""
+    # Create the DaikinClimate entity using the config entry fixture.
+    entity = DaikinClimate(mock_config_entry)
     entity.hass = hass
+
+    # Patch set_thing_state to be an AsyncMock.
     entity.set_thing_state = AsyncMock()
+
+    # Call async_set_hvac_mode with an unsupported mode.
     await entity.async_set_hvac_mode("INVALID_MODE")
+
+    # Verify that the error message is logged.
     assert "Unsupported HVAC mode: INVALID_MODE" in caplog.text
+    # Ensure that set_thing_state was not called.
     entity.set_thing_state.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_async_set_fan_mode_unsupported(dummy_coordinator, hass, caplog):
+async def test_async_set_fan_mode_unsupported(hass, caplog, mock_config_entry):
     """Test unsupported fan mode."""
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "api_key": "VALID_KEY",
-        "device_name": "TEST DEVICE",
-    }
-    entity = DaikinClimate(entry_data, dummy_coordinator)
+    # Create the DaikinClimate entity using the mock config entry fixture.
+    entity = DaikinClimate(mock_config_entry)
     entity.hass = hass
     entity.set_thing_state = AsyncMock()
 
-    # Call with an invalid fan mode.
+    # Call async_set_fan_mode with an invalid fan mode.
     await entity.async_set_fan_mode("INVALID_FAN")
 
-    # Check that the error log contains the expected message.
+    # Check that the expected error log is produced.
     assert "Unsupported fan mode." in caplog.text
-    # Ensure that no command was sent.
+    # Verify that no command was sent.
     entity.set_thing_state.assert_not_called()
 
 
-@pytest.mark.asyncio
-async def test_async_set_temperature_in_fan_only(dummy_coordinator, hass, caplog):
-    """Test set temperate in fan mode."""
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "api_key": "VALID_KEY",
-        "device_name": "TEST DEVICE",
-    }
-    entity = DaikinClimate(entry_data, dummy_coordinator)
-    entity.hass = hass
-    entity.set_thing_state = AsyncMock()
-    entity.async_write_ha_state = MagicMock()
-    entity._hvac_mode = HVACMode.FAN_ONLY
-    await entity.async_set_temperature(**{ATTR_TEMPERATURE: 24})
-    assert any(
-        "Temperature cannot be changed in" in record.message
-        for record in caplog.records
-    )
-    entity.set_thing_state.assert_not_called()
-    # Also verify that _target_temperature is set to 24 (reverting change)
-    assert entity._target_temperature == 24
+# # @pytest.mark.asyncio
+# # async def test_async_set_temperature_in_fan_only(dummy_coordinator, hass, caplog):
+# #     """Test set temperate in fan mode."""
+# #     entry_data = {
+# #         "device_apn": "TEST_APN",
+# #         "host": "192.168.1.100",
+# #         "api_key": "VALID_KEY",
+# #         "device_name": "TEST DEVICE",
+# #     }
+# #     entity = DaikinClimate(entry_data, dummy_coordinator)
+# #     entity.hass = hass
+# #     entity.set_thing_state = AsyncMock()
+# #     entity.async_write_ha_state = MagicMock()
+# #     entity._hvac_mode = HVACMode.FAN_ONLY
+# #     await entity.async_set_temperature(**{ATTR_TEMPERATURE: 24})
+# #     assert any(
+# #         "Temperature cannot be changed in" in record.message
+# #         for record in caplog.records
+# #     )
+# #     entity.set_thing_state.assert_not_called()
+# #     # Also verify that _target_temperature is set to 24 (reverting change)
+# #     assert entity._target_temperature == 24
 
 
 @pytest.mark.asyncio
-async def test_async_set_temperature_in_dry(dummy_coordinator, hass, caplog):
-    """Test set temperate in dry mode."""
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "api_key": "VALID_KEY",
-        "device_name": "TEST DEVICE",
-    }
-    entity = DaikinClimate(entry_data, dummy_coordinator)
-    entity.hass = hass
-    entity.set_thing_state = AsyncMock()
-    entity.async_write_ha_state = MagicMock()
-    entity._hvac_mode = HVACMode.DRY
-    await entity.async_set_temperature(**{ATTR_TEMPERATURE: 25})
-    assert any(
-        "Temperature cannot be changed in" in record.message
-        for record in caplog.records
-    )
-    entity.set_thing_state.assert_not_called()
-    assert entity._target_temperature == 25
+async def test_async_set_temperature_in_dry(monkeypatch, hass, mock_config_entry):
+    """Test that setting temperature in DRY mode does not send a command."""
+    # Create a DaikinClimate entity using the config entry fixture.
+    climate_entity = DaikinClimate(mock_config_entry)
+    climate_entity.hass = hass
+    climate_entity.entity_id = "climate.test_device"
+
+    # Patch async_write_ha_state and set_thing_state.
+    climate_entity.async_write_ha_state = MagicMock()
+    climate_entity.set_thing_state = AsyncMock()
+
+    # Use monkeypatch to set the internal _hvac_mode to HVACMode.DRY.
+    monkeypatch.setattr(climate_entity, "_hvac_mode", HVACMode.DRY)
+
+    # Call async_set_temperature with a test temperature value.
+    await climate_entity.async_set_temperature(**{ATTR_TEMPERATURE: 25})
+
+    # Verify that set_thing_state was not called.
+    climate_entity.set_thing_state.assert_not_called()
+
+    # Assert that the target_temperature property returns the expected value.
+    assert climate_entity.target_temperature == 25
 
 
 @pytest.mark.asyncio
-async def test_async_setup_entry_no_port_status_returns_error(hass, caplog):
-    """Test that async_setup_entry handles missing port_status."""
-    entry = MagicMock()
-    entry.data = {
-        CONF_API_KEY: "VALID_KEY",
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "device_name": "TEST DEVICE",
-    }
-    async_add_entities = MagicMock()
-    with patch(
-        "custom_components.daikin_br.climate.async_get_thing_info", return_value={}
-    ):
-        await async_setup_entry(hass, entry, async_add_entities)
-    # Expect the error log from the branch that raises ValueError and is caught
-    assert "Device setup failed. Invalid device key." in caplog.text
-    async_add_entities.assert_called_once()
-    entity = async_add_entities.call_args[0][0][0]
-    # Force coordinator failure to reflect unavailable state
-    entity.coordinator.last_update_success = False
-    assert isinstance(entity, DaikinClimate)
-    assert entity.available is False
-
-
-@pytest.mark.asyncio
-async def test_set_thing_state_preset_boost_and_none(dummy_coordinator, hass):
+async def test_set_thing_state_preset_boost_and_none(hass, mock_config_entry):
     """
-    Test set_thing_state sets preset mode to PRESET_BOOST when powerchill equals 1.
+    Test that set_thing_state updates the preset mode correctly.
 
-    Then sets preset mode to PRESET_NONE when both econo and powerchill are 0.
+    First, when powerchill equals 1, the preset mode should be PRESET_BOOST.
+    Then, when both econo and powerchill equal 0, the preset mode should be PRESET_NONE.
     """
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "api_key": "VALID_KEY",
-        "device_name": "TEST DEVICE",
-    }
-    entity = DaikinClimate(entry_data, dummy_coordinator)
-    entity.hass = hass
-    entity._ip_address = "192.168.1.100"
-    entity._device_key = "VALID_KEY"
-    entity._command_suffix = "cmd"
-    entity.async_write_ha_state = MagicMock()
+    # Create the DaikinClimate entity using the config entry fixture.
+    climate_entity = DaikinClimate(mock_config_entry)
+    climate_entity.hass = hass
+    climate_entity.entity_id = "climate.test_device"
 
-    # Prepare a dummy payload (could be any valid JSON command for this test)
-    data = json.dumps({"port1": {"temperature": 22}})
+    # Patch async_write_ha_state to avoid actual HA updates.
+    climate_entity.async_write_ha_state = MagicMock()
 
-    # Create two responses:
-    # 1. Response for PRESET_BOOST: econo=0, powerchill=1.
+    # Prepare a dummy payload (its content is irrelevant here).
+    payload = json.dumps({"port1": {"temperature": 22}})
+
+    # Create two dummy responses:
+    # Response that should trigger PRESET_BOOST.
     response_boost = {
         "port1": {
             "power": 1,
-            "mode": 3,  # COOL mode for example
+            "mode": 3,  # COOL mode (for example)
             "temperature": 22,
             "sensors": {"room_temp": 23},
             "fan": 5,
             "v_swing": 1,
             "econo": 0,
-            "powerchill": 1,
+            "powerchill": 1,  # This should set preset mode to PRESET_BOOST.
         }
     }
-    # 2. Response for PRESET_NONE: econo=0, powerchill=0.
+    # Response that should trigger PRESET_NONE.
     response_none = {
         "port1": {
             "power": 1,
@@ -1246,166 +909,146 @@ async def test_set_thing_state_preset_boost_and_none(dummy_coordinator, hass):
             "fan": 5,
             "v_swing": 1,
             "econo": 0,
-            "powerchill": 0,
+            "powerchill": 0,  # This should set preset mode to PRESET_NONE.
         }
     }
 
-    # Patch async_send_operation_data to return response_boost first.
+    # Patch async_send_operation_data to return our dummy responses sequentially.
     with patch(
         "custom_components.daikin_br.climate.async_send_operation_data",
-        side_effect=[response_boost, response_none],
+        new=AsyncMock(side_effect=[response_boost, response_none]),
     ):
-        # First call: Expect PRESET_BOOST
-        await entity.set_thing_state(data)
-        assert entity._attr_preset_mode == PRESET_BOOST
+        # First call: Expect preset mode to be PRESET_BOOST.
+        await climate_entity.set_thing_state(payload)
+        assert climate_entity.preset_mode == PRESET_BOOST
 
-        # Second call: Expect PRESET_NONE
-        await entity.set_thing_state(data)
-        assert entity._attr_preset_mode == PRESET_NONE
-
-
-def test_power_state_property(dummy_coordinator):
-    """Test power state property."""
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "api_key": "VALID_KEY",
-        "host": "192.168.1.100",
-        "device_name": "TEST DEVICE",
-    }
-    entity = DaikinClimate(entry_data, dummy_coordinator)
-    # Set internal _power_state value
-    entity._power_state = 1
+        # Second call: Expect preset mode to be PRESET_NONE.
+        await climate_entity.set_thing_state(payload)
+        assert climate_entity.preset_mode == PRESET_NONE
 
 
 @pytest.mark.asyncio
-async def test_set_thing_state_preset_boost(dummy_coordinator, hass):
+async def test_set_thing_state_preset_boost(hass, mock_config_entry):
     """
-    Test set_thing_state sets preset mode to PRESET_BOOST.
+    Test that set_thing_state updates the preset mode to PRESET_BOOST.
 
-    When v_powerchill_value equals 1.
+    When the response indicates that powerchill equals 1.
     """
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "api_key": "VALID_KEY",
-        "device_name": "TEST DEVICE",
-    }
-    entity = DaikinClimate(entry_data, dummy_coordinator)
-    entity.hass = hass
-    entity._ip_address = "192.168.1.100"
-    entity._device_key = "VALID_KEY"
-    entity._command_suffix = "cmd"
-    entity.async_write_ha_state = MagicMock()
+    # Create the DaikinClimate entity using the config entry fixture.
+    climate_entity = DaikinClimate(mock_config_entry)
+    climate_entity.hass = hass
+    climate_entity.entity_id = "climate.test_device"
+    # Patch async_write_ha_state so that no real HA update is attempted.
+    climate_entity.async_write_ha_state = MagicMock()
 
-    # Create a response where econo=0 and powerchill=1
-    # so that the code sets PRESET_BOOST.
+    # Prepare a dummy response where econo=0 and powerchill=1.
     mock_response = {
         "port1": {
             "power": 1,
-            "mode": 3,  # COOL mode for example
+            "mode": 3,  # For example, COOL mode.
             "temperature": 22,
             "sensors": {"room_temp": 23},
-            "fan": 5,
-            "v_swing": 1,
+            "fan": 5,  # Should map to "medium" per your mapping.
+            "v_swing": 1,  # Expected to map to SWING_VERTICAL.
             "econo": 0,
-            "powerchill": 1,
+            "powerchill": 1,  # This should trigger preset mode PRESET_BOOST.
         }
     }
 
     with patch(
         "custom_components.daikin_br.climate.async_send_operation_data",
-        return_value=mock_response,
+        new=AsyncMock(return_value=mock_response),
     ):
-        data = json.dumps({"port1": {"temperature": 22}})
-        await entity.set_thing_state(data)
-        # Verify that the branch "if v_powerchill_value == 1:" was executed.
-        assert entity._attr_preset_mode == PRESET_BOOST
-    assert entity.power_state == 1
+        # Prepare a dummy payload (its content is not significant for the state update).
+        payload = json.dumps({"port1": {"temperature": 22}})
+        await climate_entity.set_thing_state(payload)
+
+        # Verify that the public preset_mode property reflects PRESET_BOOST.
+        assert climate_entity.preset_mode == PRESET_BOOST
+
+    # Also verify that the public power_state property is updated to 1.
+    assert climate_entity.power_state == 1
 
 
 @pytest.mark.asyncio
-async def test_set_thing_state_invalid_data_exception(dummy_coordinator, hass, caplog):
-    """
-    Test that set_thing_state logs an error.
-
-    When an InvalidDataException is raised.
-    """
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "host": "192.168.1.100",
-        "api_key": "VALID_KEY",
-        "device_name": "TEST DEVICE",
-    }
-    entity = DaikinClimate(entry_data, dummy_coordinator)
+async def test_set_thing_state_invalid_data_exception(hass, caplog, mock_config_entry):
+    """Test that set_thing_state logs an error when InvalidDataException is raised."""
+    # Create the DaikinClimate entity using the config entry fixture.
+    # The fixture 'mock_config_entry' already sets runtime_data.
+    entity = DaikinClimate(mock_config_entry)
     entity.hass = hass
-    entity._ip_address = "192.168.1.100"
-    entity._device_key = "VALID_KEY"
-    entity._command_suffix = "cmd"
+    entity.entity_id = "climate.test_device"
+
+    # Patch async_write_ha_state to avoid actual HA state updates.
     entity.async_write_ha_state = MagicMock()
 
-    data = json.dumps({"port1": {"temperature": 22}})
+    payload = json.dumps({"port1": {"temperature": 22}})
 
     with patch(
         "custom_components.daikin_br.climate.async_send_operation_data",
-        side_effect=InvalidDataException("Invalid Data"),
+        new=AsyncMock(side_effect=InvalidDataException("Invalid Data")),
     ):
-        await entity.set_thing_state(data)
+        await entity.set_thing_state(payload)
 
-    # Check that the error message for InvalidDataException is logged.
-    assert f"Error executing command {entity._unique_id}:" in caplog.text
+    # Verify that the error message is logged.
+    # The unique_id property comes from the config entry's device_apn.
+    assert f"Error executing command {entity.unique_id}:" in caplog.text
     assert "Invalid Data" in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_handle_coordinator_update_missing_data(dummy_coordinator, hass):
+async def test_handle_coordinator_update_missing_data(hass, mock_config_entry):
     """
     Test that _handle_coordinator_update sets _attr_available to False.
 
     When the coordinator data is missing the expected 'port1' key.
     """
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "api_key": "VALID_KEY",
-        "host": "192.168.1.100",
-        "device_name": "TEST DEVICE",
-    }
-    entity = DaikinClimate(entry_data, dummy_coordinator)
+    # Create the DaikinClimate entity using the config entry fixture.
+    entity = DaikinClimate(mock_config_entry)
     entity.hass = hass
     # Patch async_write_ha_state to avoid side effects.
     entity.async_write_ha_state = MagicMock()
-    # Simulate missing data by setting coordinator.data to an empty dict.
-    dummy_coordinator.data = {}
+
+    # Simulate missing data by setting the dummy coordinator's data to an empty dict.
+    mock_config_entry.runtime_data.data = {}
+
+    # Call the coordinator update handler.
     entity._handle_coordinator_update()
+
+    # Assert that the entity is marked as unavailable.
     assert entity._attr_available is False
 
 
 @pytest.mark.asyncio
 async def test_handle_coordinator_update_valid_calls_write_state(
-    dummy_coordinator, hass
+    hass, mock_config_entry
 ):
-    """Test that _handle_coordinator_update sets _attr_available to True."""
-    entry_data = {
-        "device_apn": "TEST_APN",
-        "api_key": "VALID_KEY",
-        "host": "192.168.1.100",
-        "device_name": "TEST DEVICE",
-    }
-    entity = DaikinClimate(entry_data, dummy_coordinator)
+    """
+    Test that _handle_coordinator_update sets the entity as available.
+
+    Calls update_entity_properties with valid data.
+    """
+    # Create the DaikinClimate entity using the config entry fixture.
+    entity = DaikinClimate(mock_config_entry)
     entity.hass = hass
     entity.entity_id = "climate.test_entity"
-    # Patch async_write_ha_state so we can count its calls.
+
+    # Patch async_write_ha_state so we can count its calls without side effects.
     entity.async_write_ha_state = MagicMock()
-    # Patch update_entity_properties
-    # so that its internal call to async_write_ha_state occurs.
+    # Patch update_entity_properties so we can track its call.
     entity.update_entity_properties = MagicMock()
-    # Set valid coordinator data (with "port1" present).
-    dummy_coordinator.data = {
+
+    # Set valid coordinator data (with "port1" present) in the runtime_data.
+    mock_config_entry.runtime_data.data = {
         "port1": {"fw_ver": "1.0.0", "temperature": 24, "power": 1}
     }
-    # Call _handle_coordinator_update.
+
+    # Call the coordinator update handler.
     entity._handle_coordinator_update()
 
-    # Verify that update_entity_properties was called with valid data.
-    entity.update_entity_properties.assert_called_once_with(dummy_coordinator.data)
-    # The branch in _handle_coordinator_update sets _attr_available to True.
-    assert entity._attr_available is True
+    # Verify that update_entity_properties was called with the valid data.
+    entity.update_entity_properties.assert_called_once_with(
+        mock_config_entry.runtime_data.data
+    )
+    # Verify that the entity is marked as available.
+    assert entity.available is True

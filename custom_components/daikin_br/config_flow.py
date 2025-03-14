@@ -54,6 +54,7 @@ class ConfigFlow(config_entries.ConfigFlow):
             return self.async_abort(reason="unknown_device")
 
         # Check if device is already configured
+        # pylint: disable=no-else-return
         existing_entry = self._async_find_existing_entry(apn)
         if existing_entry:
             if existing_entry.data.get("host") != host:
@@ -102,6 +103,7 @@ class ConfigFlow(config_entries.ConfigFlow):
 
         # If no discovery info is available
         # we prompt the user to input the device IP address.
+        # pylint: disable=no-else-return
         if not discovery_info:
             return await self.async_step_manual(user_input)
         else:
@@ -303,6 +305,7 @@ class ConfigFlow(config_entries.ConfigFlow):
                 return False
             base64.b64decode(key, validate=True)
             return True
+        # pylint: disable=broad-exception-caught
         except Exception:
             return False
 

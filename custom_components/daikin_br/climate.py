@@ -16,10 +16,11 @@ from homeassistant.components.climate.const import (
     HVACMode,
 )
 from homeassistant.const import ATTR_TEMPERATURE, CONF_API_KEY, UnitOfTemperature
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from pyiotdevice import (
     CommunicationErrorException,
     InvalidDataException,
-    async_get_thing_info,
     async_send_operation_data,
 )
 
@@ -28,63 +29,24 @@ from .entity import DaikinEntity
 
 _LOGGER = logging.getLogger(__name__)
 
+# pylint: disable=too-many-instance-attributes, too-many-public-methods
 # Coordinator is used to centralize the data updates
 PARALLEL_UPDATES = 0
 
 
-async def async_setup_entry(hass, entry: DaikinConfigEntry, async_add_entities):
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: DaikinConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
     """Set up Daikin Climate device from a config entry."""
-    # Check if the device_key exists in the entry data
-    device_key = entry.data.get(CONF_API_KEY)
-    if not device_key:
-        _LOGGER.error("Device key is missing in the configuration entry!")
-        return
-
-    # Offload the blocking call to a thread pool
-    ip_address = entry.data.get("host")
-    # Default firmware version
-    entry_data = {**entry.data, "fw_ver": "Unknown"}
-    # Track status to avoid calling update on failure
-    status = None
-    port_status = None
-
-    try:
-        status = await async_get_thing_info(ip_address, device_key, "acstatus")
-        if isinstance(status, dict):
-            port_status = status.get("port1", {})
-            if not port_status:
-                _LOGGER.error("Device setup failed. Invalid device key.")
-                raise ValueError("Invalid device key: No port_status")
-
-            # Update firmware version if successful
-            entry_data["fw_ver"] = port_status.get("fw_ver", "Unknown")
-
-    except (ValueError, KeyError) as e:
-        _LOGGER.error("Configuration error: %s", e)
-
-    except TimeoutError as e:
-        _LOGGER.error("Timeout while communicating with the device: %s", e)
-
-    except OSError as e:
-        _LOGGER.error("Network error while communicating with the device: %s", e)
-
-    except Exception as e:
-        # Logs full traceback
-        _LOGGER.exception("Unexpected error: %s", e)
-
-    # Create the entity (always)
-    climate_entity = DaikinClimate(entry_data, entry.runtime_data)
-
-    # Mark entity as unavailable if the port status retrieval failed
-    if not port_status:
-        climate_entity._attr_available = False
+    climate_entity = DaikinClimate(entry)
 
     # Add the entity
     async_add_entities([climate_entity])
 
-    # If port status retrieval was successful, update entity properties
-    if port_status:
-        climate_entity.update_entity_properties(status)
+    # Refresh after setup
+    await climate_entity.coordinator.async_request_refresh()
 
 
 # class DaikinClimate(ClimateEntity):
@@ -93,16 +55,17 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
 
     _attr_name = None
 
-    def __init__(self, device_data, coordinator):
+    def __init__(self, config_entry: DaikinConfigEntry) -> None:
         """Initialize the climate device."""
-        super().__init__(coordinator)
+        # Use the coordinator from runtime_data.
+        self.coordinator = config_entry.runtime_data
+        super().__init__(self.coordinator)
         self._attr_available = True
-        # self._remove_listener = None
+
+        # Extract device data from the config entry.
+        device_data = config_entry.data
 
         self._device_key = device_data.get(CONF_API_KEY, None)
-        if self._device_key is None:
-            _LOGGER.error("Device key not found while creating entity!")
-            return
 
         _LOGGER.debug(
             "Initializing DaikinClimate - Name: %s, APN: %s",
@@ -112,7 +75,6 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
 
         self._device_name = device_data.get("device_name", "Unknown")
         self._host = device_data.get("host", None)
-        # self._ip_address = f"{device_data.get("device_apn")}.local"
         self._ip_address = self._host
         self._poll_interval = device_data.get("poll_interval")  # For future use
         self._command_suffix = device_data.get("command_suffix")
@@ -365,10 +327,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         # Check HVAC mode and apply temperature range or restrictions
         if self._hvac_mode == HVACMode.COOL:
             if temperature < 16 or temperature > 32:
-                message = (
-                    "Temperature %s°C is out of range for COOL mode (16-32°C)."
-                    % temperature
-                )
+                message = f"Temperature {temperature}°C is out of range for COOL mode (16-32°C)."
                 _LOGGER.error("Entity %s: %s", self.entity_id, message)
                 # Revert the temperature dial to the previous value
                 self._target_temperature = temperature
@@ -504,6 +463,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         except (InvalidDataException, CommunicationErrorException) as e:
             _LOGGER.error("Error executing command %s: %s", self._unique_id, e)
 
+        # pylint: disable=broad-exception-caught
         except Exception as e:
             _LOGGER.error("Failed to send command: %s", e)
 
@@ -560,6 +520,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
                 self._attr_available = True
             else:
                 self._attr_available = False
+        # pylint: disable=broad-exception-caught
         except Exception as err:
             _LOGGER.error(
                 "Error updating entity properties for %s: %s", self._unique_id, err

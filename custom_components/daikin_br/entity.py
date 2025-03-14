@@ -7,6 +7,7 @@ from .const import DOMAIN
 from .coordinator import DaikinDataUpdateCoordinator
 
 
+# pylint: disable=too-few-public-methods
 class DaikinEntity(CoordinatorEntity[DaikinDataUpdateCoordinator]):
     """Base entity for Daikin devices using a DataUpdateCoordinator."""
 

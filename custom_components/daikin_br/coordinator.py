@@ -6,19 +6,28 @@ import logging
 from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from typing_extensions import TypeAlias
 
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 
+# pylint: disable=too-many-arguments, too-many-positional-arguments
+# pylint: disable=too-few-public-methods
 class DaikinDataUpdateCoordinator(DataUpdateCoordinator):
     """DataUpdateCoordinator for Daikin devices."""
 
     def __init__(
-        self, hass, entry: DaikinConfigEntry, device_apn, update_method, update_interval
-    ):
+        self,
+        hass: HomeAssistant,
+        entry: DaikinConfigEntry,
+        device_apn,
+        update_method,
+        update_interval,
+    ) -> None:
         """Initialize the coordinator."""
         self.device_apn = device_apn
         self._update_method = update_method
@@ -38,7 +47,6 @@ class DaikinDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.debug(
                     "Unable to retrieve device status data for %s", self.device_apn
                 )
-                # return {}
                 raise ValueError("Failed to retrieve device data")
             return data
         except Exception as e:
@@ -46,12 +54,9 @@ class DaikinDataUpdateCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(
                 f"The device {self.device_apn} is unavailable: {e}"
             ) from e
-            # return {}
 
 
 if TYPE_CHECKING:
-    from typing_extensions import TypeAlias
-
     DaikinConfigEntry: TypeAlias = ConfigEntry[DaikinDataUpdateCoordinator]
 else:
     DaikinConfigEntry = ConfigEntry

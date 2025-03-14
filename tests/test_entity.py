@@ -8,6 +8,8 @@ from custom_components.daikin_br.const import DOMAIN
 from custom_components.daikin_br.entity import DaikinEntity
 
 
+# pylint: disable=redefined-outer-name, too-few-public-methods
+# pylint: disable=protected-access
 @pytest.fixture
 def dummy_coordinator():
     """Create a dummy coordinator for testing purposes."""

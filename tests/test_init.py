@@ -21,6 +21,8 @@ from custom_components.daikin_br.coordinator import (
 )
 
 
+# pylint: disable=redefined-outer-name, too-few-public-methods
+# pylint: disable=protected-access
 # Define a dummy config entry to simulate a Home Assistant ConfigEntry.
 class DummyConfigEntry:
     """Dummy config entry for testing purposes."""
@@ -30,12 +32,6 @@ class DummyConfigEntry:
         self.entry_id = "dummy_entry"
         self.data = data
         self.runtime_data = None
-
-        async def async_setup(self, **kwargs):
-            # Accept any keyword arguments (like integration=...) and do nothing.
-            return None
-
-        self.async_setup = async_setup
 
 
 # Dummy coordinator to simulate runtime_data.
@@ -162,6 +158,7 @@ async def test_async_setup_entry_success(hass, dummy_config_entry):
 
     original_init = DataUpdateCoordinator.__init__
 
+    # pylint: disable=duplicate-code
     def dummy_init(self, hass, logger, **kwargs):
         """Override __init__ to accept extra args without breaking HA."""
         self.hass = hass
