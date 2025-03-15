@@ -82,8 +82,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> b
 async def async_remove_config_entry_device(
     hass: HomeAssistant, config_entry: DaikinConfigEntry, device_entry: DeviceEntry
 ) -> bool:
-    """
-    Remove a config entry from a device.
+    """Remove a config entry from a device.
 
     Returns True if the config entry should be removed from the device,
     i.e., if none of the device entry's identifiers for this integration's

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any
 
 from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate.const import (
@@ -119,12 +120,12 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         return "daikin_ac"
 
     @property
-    def unique_id(self):
+    def unique_id(self) -> str:
         """Return a unique ID for the climate entity."""
         return self._unique_id
 
     @property
-    def name(self):
+    def name(self) -> str | None:
         """Return the name of the device."""
         # Let the device registry supply the name, so return None here.
         return None
@@ -135,7 +136,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         return self._power_state
 
     @property
-    def hvac_modes(self):
+    def hvac_modes(self) -> list[HVACMode]:
         """Return the list of supported HVAC modes."""
         return [
             HVACMode.OFF,
@@ -147,57 +148,57 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         ]
 
     @property
-    def hvac_mode(self):
+    def hvac_mode(self) -> HVACMode:
         """Return current HVAC mode."""
         return self._hvac_mode
 
     @property
-    def supported_features(self):
+    def supported_features(self) -> ClimateEntityFeature:
         """Return supported features."""
         return self._attr_supported_features
 
     @property
-    def current_temperature(self):
+    def current_temperature(self) -> float | None:
         """Return the current temperature."""
         return self._current_temperature
 
     @property
-    def target_temperature(self):
+    def target_temperature(self) -> float | None:
         """Return the temperature we try to reach."""
         return self._target_temperature
 
     @property
-    def temperature_unit(self):
+    def temperature_unit(self) -> str:
         """Return the unit of measurement."""
         return self._attr_temperature_unit
 
     @property
-    def fan_modes(self):
+    def fan_modes(self) -> list[str]:
         """Return the list of available fan modes."""
         return self._fan_modes
 
     @property
-    def fan_mode(self):
+    def fan_mode(self) -> str:
         """Return the current fan mode."""
         return self._fan_mode
 
     @property
-    def preset_modes(self):
+    def preset_modes(self) -> list[str]:
         """Return the list of available preset modes."""
         return self._attr_preset_modes
 
     @property
-    def preset_mode(self):
+    def preset_mode(self) -> str:
         """Return the current preset mode."""
         return self._attr_preset_mode
 
     @property
-    def swing_modes(self):
+    def swing_modes(self) -> list[str] | None:
         """Return the list of supported swing modes."""
         return self._attr_swing_modes
 
     @property
-    def swing_mode(self):
+    def swing_mode(self) -> str | None:
         """Return the current swing mode."""
         return self._attr_swing_mode
 
@@ -245,7 +246,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
             fan_value, "auto"
         )  # Default to "auto" if value is unknown
 
-    async def async_set_hvac_mode(self, hvac_mode):
+    async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set the HVAC mode on the AC device."""
         # Map Home Assistant HVAC modes to device modes
         hvac_mode_mapping = {
@@ -276,7 +277,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         # Use the common function to send the data and update state
         await self.set_thing_state(json_data)
 
-    async def async_set_fan_mode(self, fan_mode):
+    async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set the fan mode on the AC device."""
         # Map Home Assistant fan modes to device fan modes
         fan_mode_mapping = {
@@ -302,7 +303,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         fan_mode_value = fan_mode_mapping.get(fan_mode)
 
         if fan_mode_value is None:
-            _LOGGER.error("Unsupported fan mode.")
+            _LOGGER.error("Unsupported fan mode")
             return
 
         # Prepare the payload for the device
@@ -314,7 +315,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         # Use the common function to send the data and update state
         await self.set_thing_state(json_data)
 
-    async def async_set_temperature(self, **kwargs):
+    async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set the target temperature on the AC device."""
         # Get the temperature value from kwargs
         temperature = kwargs.get(ATTR_TEMPERATURE)
@@ -350,7 +351,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         # Use the common function to send the data and update state
         await self.set_thing_state(json_data)
 
-    async def async_set_preset_mode(self, preset_mode):
+    async def async_set_preset_mode(self, preset_mode: str) -> None:
         """Set the preset mode only if device is on (power_state = 1)."""
         data = None
         if self._power_state == 1:  # Check if the device is ON
@@ -390,7 +391,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         # Use the common function to send the data and update state
         await self.set_thing_state(json_data)
 
-    async def async_set_swing_mode(self, swing_mode):
+    async def async_set_swing_mode(self, swing_mode: str) -> None:
         """Set the vertical swing mode on the device."""
         if swing_mode not in self._attr_swing_modes:
             _LOGGER.error("Unsupported swing mode: %s", swing_mode)
@@ -464,7 +465,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
             _LOGGER.error("Error executing command %s: %s", self._unique_id, e)
 
         # pylint: disable=broad-exception-caught
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             _LOGGER.error("Failed to send command: %s", e)
 
     def update_entity_properties(self, status):
@@ -521,7 +522,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
             else:
                 self._attr_available = False
         # pylint: disable=broad-exception-caught
-        except Exception as err:
+        except Exception as err:  # noqa: BLE001
             _LOGGER.error(
                 "Error updating entity properties for %s: %s", self._unique_id, err
             )

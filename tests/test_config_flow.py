@@ -855,7 +855,7 @@ async def test_async_step_manual_invalid_device_key_format(caplog):
     # Check that errors contains an error for the API key.
     assert result["errors"].get(CONF_API_KEY) == "invalid_key"
     # Verify the expected log message is present.
-    assert "Invalid device key format." in caplog.text
+    assert "Invalid device key format" in caplog.text
 
 
 async def async_return(value):

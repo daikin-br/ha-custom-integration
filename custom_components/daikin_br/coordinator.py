@@ -47,7 +47,7 @@ class DaikinDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.debug(
                     "Unable to retrieve device status data for %s", self.device_apn
                 )
-                raise ValueError("Failed to retrieve device data")
+                raise TypeError("Failed to retrieve device data")
             return data
         except Exception as e:
             _LOGGER.debug("Error fetching data for %s: %s", self.device_apn, e)

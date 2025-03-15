@@ -41,7 +41,9 @@ class ConfigFlow(config_entries.ConfigFlow):
     DOMAIN = DOMAIN
     VERSION = 1
 
-    async def async_step_zeroconf(self, discovery_info: ServiceInfo):
+    async def async_step_zeroconf(
+        self, discovery_info: ServiceInfo
+    ) -> config_entries.ConfigFlowResult:
         """Handle discovery via zeroconf."""
         _LOGGER.debug("Discovered device via zeroconf: %s", discovery_info)
 
@@ -59,7 +61,7 @@ class ConfigFlow(config_entries.ConfigFlow):
         if existing_entry:
             if existing_entry.data.get("host") != host:
                 _LOGGER.info(
-                    "Device IP has changed from %s to %s; Updating config entry.",
+                    "Device IP has changed from %s to %s; Updating config entry",
                     existing_entry.data.get("host"),
                     host,
                 )
@@ -69,10 +71,9 @@ class ConfigFlow(config_entries.ConfigFlow):
                     data_updates={"host": host},
                     reason="device_ip_updated",
                 )
-            else:
-                return self.async_abort(reason="already_configured")
+            return self.async_abort(reason="already_configured")
 
-        _LOGGER.info("Discovered Daikin device: %s at %s.", hostname, host)
+        _LOGGER.info("Discovered Daikin device: %s at %s", hostname, host)
 
         # Set the unique ID for this flow
         await self.async_set_unique_id(apn)
@@ -95,7 +96,9 @@ class ConfigFlow(config_entries.ConfigFlow):
         # Prompt user for device_key entry
         return await self.async_step_user()
 
-    async def async_step_user(self, user_input=None):
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Handle user configuration step."""
         discovery_info = self.context.get("discovery_info", {})
 
@@ -106,71 +109,67 @@ class ConfigFlow(config_entries.ConfigFlow):
         # pylint: disable=no-else-return
         if not discovery_info:
             return await self.async_step_manual(user_input)
-        else:
-            # Discovery info exists. Use discovered details.
-            default_host_name = discovery_info.get("host_name", "")
-            default_host = discovery_info.get(
-                "host", ""
-            )  # Discovered device IP address
-            # ip_address = f"{default_host_name}.local"
-            ip_address = default_host
-            device_apn = discovery_info.get("device_apn", "")
+        # Discovery info exists. Use discovered details.
+        default_host_name = discovery_info.get("host_name", "")
+        default_host = discovery_info.get("host", "")  # Discovered device IP address
+        # ip_address = f"{default_host_name}.local"
+        ip_address = default_host
+        device_apn = discovery_info.get("device_apn", "")
 
-            if user_input is not None:
-                _LOGGER.debug("User input received.")
-                device_name = user_input.get("device_name", "").strip()
-                api_key = user_input.get(CONF_API_KEY, "").strip()
+        if user_input is not None:
+            _LOGGER.debug("User input received")
+            device_name = user_input.get("device_name", "").strip()
+            api_key = user_input.get(CONF_API_KEY, "").strip()
 
-                # Check if the user entered the device name
-                if not device_name:
-                    errors["device_name"] = "required"
+            # Check if the user entered the device name
+            if not device_name:
+                errors["device_name"] = "required"
 
-                # Check if the user entered the device key
-                if not api_key:
-                    errors[CONF_API_KEY] = "required"
+            # Check if the user entered the device key
+            if not api_key:
+                errors[CONF_API_KEY] = "required"
 
-                # Step 1: Validate Base64 key before proceeding
-                elif not self._is_valid_base64(api_key):
-                    _LOGGER.error("Invalid device key format.")
-                    errors[CONF_API_KEY] = "invalid_key"
+            # Step 1: Validate Base64 key before proceeding
+            elif not self._is_valid_base64(api_key):
+                _LOGGER.error("Invalid device key format")
+                errors[CONF_API_KEY] = "invalid_key"
 
-                # Step 2: Validate key by attempting decryption
-                elif not await async_get_thing_info(ip_address, api_key, "acstatus"):
-                    _LOGGER.error("Invalid device key or host not reachable")
-                    errors[CONF_API_KEY] = "cannot_connect"
+            # Step 2: Validate key by attempting decryption
+            elif not await async_get_thing_info(ip_address, api_key, "acstatus"):
+                _LOGGER.error("Invalid device key or host not reachable")
+                errors[CONF_API_KEY] = "cannot_connect"
 
-                else:
-                    # Create the config entry with the discovered and user-provided data
-                    return self.async_create_entry(
-                        title=(
-                            f"{user_input['device_name']} "
-                            f"(SSID: {default_host_name})"
-                        ),
-                        data={
-                            "device_name": user_input["device_name"],
-                            CONF_API_KEY: api_key,
-                            "host": default_host,
-                            "device_apn": device_apn,
-                            "device_ssid": default_host_name,
-                            "command_suffix": COMMAND_SUFFIX,
-                            # To be enabled later
-                            # "poll_interval": user_input["poll_interval"],
-                        },
-                    )
+            else:
+                # Create the config entry with the discovered and user-provided data
+                return self.async_create_entry(
+                    title=(f"{user_input['device_name']} (SSID: {default_host_name})"),
+                    data={
+                        "device_name": user_input["device_name"],
+                        CONF_API_KEY: api_key,
+                        "host": default_host,
+                        "device_apn": device_apn,
+                        "device_ssid": default_host_name,
+                        "command_suffix": COMMAND_SUFFIX,
+                        # To be enabled later
+                        # "poll_interval": user_input["poll_interval"],
+                    },
+                )
 
-            # If we reach this point
-            # - it means the form has not been submitted yet or there was an error
-            return self.async_show_form(
-                step_id="user",
-                data_schema=DISCOVERED_SCHEMA,
-                errors=errors,
-                description_placeholders={
-                    "hostname": default_host_name,
-                    "host": default_host,
-                },
-            )
+        # If we reach this point
+        # - it means the form has not been submitted yet or there was an error
+        return self.async_show_form(
+            step_id="user",
+            data_schema=DISCOVERED_SCHEMA,
+            errors=errors,
+            description_placeholders={
+                "hostname": default_host_name,
+                "host": default_host,
+            },
+        )
 
-    async def async_step_manual(self, user_input=None):
+    async def async_step_manual(
+        self, user_input: Any | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Handle manual entry step when no device is discovered."""
         errors = {}
 
@@ -190,7 +189,7 @@ class ConfigFlow(config_entries.ConfigFlow):
 
             # Step 1: Validate Base64 key before proceeding
             elif not self._is_valid_base64(api_key):
-                _LOGGER.error("Invalid device key format.")
+                _LOGGER.error("Invalid device key format")
                 errors[CONF_API_KEY] = "invalid_key"
 
             # Step 2: Validate key by attempting decryption
@@ -225,8 +224,7 @@ class ConfigFlow(config_entries.ConfigFlow):
                     # Create the config entry with all data
                     return self.async_create_entry(
                         title=(
-                            f"{user_input['device_name']} "
-                            f"(SSID: {default_host_name})"
+                            f"{user_input['device_name']} (SSID: {default_host_name})"
                         ),
                         data={
                             "device_name": user_input["device_name"],
@@ -246,7 +244,9 @@ class ConfigFlow(config_entries.ConfigFlow):
             description_placeholders={"host": "Enter the device IP address"},
         )
 
-    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None):
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Handle reconfiguration flow to update the device key.
 
         This flow is triggered when a user wants to reconfigure the device key
@@ -264,7 +264,7 @@ class ConfigFlow(config_entries.ConfigFlow):
         errors = {}
 
         if user_input is not None:
-            _LOGGER.debug("Reconfigure user input received.")
+            _LOGGER.debug("Reconfigure user input received")
             new_api_key = user_input.get(CONF_API_KEY, "").strip()
 
             if not new_api_key:

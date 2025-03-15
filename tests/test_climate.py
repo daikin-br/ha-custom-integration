@@ -181,7 +181,7 @@ async def test_async_set_fan_mode(monkeypatch, hass, caplog, mock_config_entry):
     # Assert that no command is sent.
     assert climate_entity.set_thing_state.call_count == 0
     # Assert that an error log was recorded.
-    assert any("Unsupported fan mode." in record.message for record in caplog.records)
+    assert any("Unsupported fan mode" in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio
@@ -812,7 +812,7 @@ async def test_async_set_fan_mode_unsupported(hass, caplog, mock_config_entry):
     await entity.async_set_fan_mode("INVALID_FAN")
 
     # Check that the expected error log is produced.
-    assert "Unsupported fan mode." in caplog.text
+    assert "Unsupported fan mode" in caplog.text
     # Verify that no command was sent.
     entity.set_thing_state.assert_not_called()
 
