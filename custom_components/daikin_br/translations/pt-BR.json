@@ -29,18 +29,18 @@
       }
     },
     "abort": {
-      "already_configured": "Dispositivo já configurado.",
-      "cannot_connect": "Não é possível conectar ao dispositivo.",
-      "reconfigure_successful": "Reconfiguração bem-sucedida. A integração foi atualizada.",
-      "unique_id_mismatched": "O ID exclusivo do dispositivo não corresponde ao valor esperado. Por favor, remova a configuração existente e configure novamente."
+      "already_configured": "Dispositivo já está configurado",
+      "cannot_connect": "Falha ao conectar",
+      "reconfigure_successful": "A reconfiguração foi bem-sucedida",
+      "unique_id_mismatched": "O ID exclusivo do dispositivo não corresponde ao valor esperado",
+      "device_ip_updated": "O IP do dispositivo foi alterado, configuração atualizada"
     },
     "error": {
-      "unknown": "Erro desconhecido.",
-      "invalid_auth": "Não foi possível autenticar",
-      "cannot_connect": "Não é possível conectar ao dispositivo.",
-      "invalid_key": "Chave inválida, por favor verifique novamente.",
-      "unique_id_mismatched": "O ID exclusivo do dispositivo não corresponde ao valor esperado. Por favor, remova a configuração existente e configure novamente.",
-      "device_ip_updated": "O IP do dispositivo foi alterado; configuração atualizada."
+      "unknown": "Erro inesperado",
+      "invalid_auth": "Autenticação inválida",
+      "cannot_connect": "Falha ao conectar",
+      "invalid_key": "Chave de API inválida",
+      "unique_id_mismatched": "O ID exclusivo do dispositivo não corresponde ao valor esperado"
     }
   },
   "entity": {

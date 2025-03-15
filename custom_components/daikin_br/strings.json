@@ -29,18 +29,18 @@
             }
         },
         "abort": {
-            "already_configured": "Device already configured.",
-            "cannot_connect": "Cannot connect to device.",
-            "reconfigure_successful": "Reconfiguration successful. The integration has been updated.",
-            "unique_id_mismatched": "The device's unique ID does not match the expected value. Please remove the existing configuration and set it up again.",
-            "device_ip_updated": "Device IP changed; configuration updated."
+            "already_configured": "[%key:common::config_flow::abort::already_configured_device%]",
+            "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+            "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]",
+            "unique_id_mismatched": "The device's unique ID does not match the expected value",
+            "device_ip_updated": "The device IP changed, configuration updated"
         },
         "error": {
-            "unknown": "Unknown error.",
-            "invalid_auth": "Unable to authenticate",
-            "cannot_connect": "Cannot connect to device.",
-            "invalid_key": "Invalid key, please check again.",
-            "unique_id_mismatched": "The device's unique ID does not match the expected value. Please remove the existing configuration and set it up again."
+            "unknown": "[%key:common::config_flow::error::unknown%]",
+            "invalid_auth": "[%key:common::config_flow::error::invalid_auth%]",
+            "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+            "invalid_key": "[%key:common::config_flow::error::invalid_api_key%]",
+            "unique_id_mismatched": "The device's unique ID does not match the expected value"
         }
     },
     "entity": {
