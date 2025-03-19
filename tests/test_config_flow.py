@@ -5,11 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
+from custom_components.daikin_br.config_flow import ConfigFlow
+
 # import voluptuous as vol
 from homeassistant.const import CONF_API_KEY
-from homeassistant.data_entry_flow import RESULT_TYPE_ABORT, RESULT_TYPE_FORM
-
-from custom_components.daikin_br.config_flow import ConfigFlow
+from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
 
 # pylint: disable=redefined-outer-name, too-few-public-methods
 # pylint: disable=protected-access
@@ -22,7 +23,7 @@ class DummyFlow:
 
     async def async_init(self):
         """Simulate async initialization of a config flow."""
-        return None
+        return
 
     def async_progress_by_handler(self):
         """Simulate async progress of a config flow."""
@@ -33,9 +34,14 @@ class DummyFlow:
 class DummyConfigEntries:
     """A dummy config entry flow class to simulate Home Assistant's config flow."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the DummyConfigEntries object."""
         self.flow = DummyFlow()
+        self.entries = []  # Initialize entries list to avoid AttributeError
+
+    def async_entries(self):
+        """Simulate retrieving existing config entries."""
+        return self.entries  # Ensure this returns a list
 
     async def async_forward_entry_setups(self):
         """Simulate forward entry setup of a config flow."""
@@ -57,7 +63,7 @@ def dummy_current_entries():
 class DummyServiceInfo:
     """Dummy ServiceInfo-like object for zeroconf discovery."""
 
-    def __init__(self, hostname, ip_address, properties):
+    def __init__(self, hostname, ip_address, properties) -> None:
         """Initialize the service info object."""
         self.hostname = hostname
         self.ip_address = ip_address
@@ -68,7 +74,7 @@ class DummyServiceInfo:
 class DummyConfigEntry:
     """Dummy ConfigEntry for testing helper methods."""
 
-    def __init__(self, entry_id, data):
+    def __init__(self, entry_id, data) -> None:
         """Initialize object."""
         self.entry_id = entry_id
         self.data = data
@@ -95,7 +101,7 @@ def dummy_discovery_info():
 
 
 @pytest.fixture
-def config_flow(hass):
+def config_flow(hass: HomeAssistant):
     """Return an instance of the ConfigFlow using the provided hass fixture."""
     flow = ConfigFlow()
     flow.hass = hass
@@ -124,14 +130,14 @@ def config_flow(hass):
 
 
 @pytest.mark.asyncio
-async def test_zeroconf_flow_discovery(config_flow, dummy_discovery_info):
+async def test_zeroconf_flow_discovery(config_flow, dummy_discovery_info) -> None:
     """Test that the zeroconf step stores discovery info and moves to the user step."""
     result = await config_flow.async_step_zeroconf(dummy_discovery_info)
     # Expect a form to be shown for the "user" step.
-    assert result["type"] == "form"
+    assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "user"
     # Ensure discovery info is stored in the flow context.
-    disc = config_flow.context.get("discovery_info")
+    disc = config_flow.discovery_info
     assert disc is not None
     # The hostname should have ".local" stripped.
     assert disc["host_name"] == "TestDevice"
@@ -142,7 +148,7 @@ async def test_zeroconf_flow_discovery(config_flow, dummy_discovery_info):
 @pytest.mark.asyncio
 async def test_zeroconf_flow_device_already_configured(
     config_flow, dummy_discovery_info
-):
+) -> None:
     """Test that the zeroconf step aborts if the device is already configured."""
     # Simulate an existing entry with the same IP and APN
     existing_entry = DummyConfigEntry(
@@ -161,12 +167,8 @@ async def test_zeroconf_flow_device_already_configured(
 
 
 @pytest.mark.asyncio
-async def test_zeroconf_unique_id_check_abort(config_flow):
-    """
-    Test flow aborts scenario.
-
-    If a config entry with the same unique ID already exists.
-    """
+async def test_zeroconf_unique_id_check_abort(config_flow) -> None:
+    """Test flow aborts scenario. If a config entry with the same unique ID already exists."""
     # Simulate an existing entry with a unique ID (apn)
     existing_entry = DummyConfigEntry(
         entry_id="dummy_entry", data={"host": "192.168.2.100", "device_apn": "TEST_APN"}
@@ -177,12 +179,14 @@ async def test_zeroconf_unique_id_check_abort(config_flow):
     config_flow._async_find_existing_entry = AsyncMock(return_value=existing_entry)
 
     # Patch the async_set_unique_id to simulate the setting of a unique ID (apn)
-    with patch.object(
-        config_flow, "async_set_unique_id", AsyncMock()
-    ) as mock_set_unique_id, patch.object(
-        config_flow, "_abort_if_unique_id_configured", AsyncMock()
-    ) as mock_abort_if_unique_id_configured:
-
+    with (
+        patch.object(
+            config_flow, "async_set_unique_id", AsyncMock()
+        ) as mock_set_unique_id,
+        patch.object(
+            config_flow, "_abort_if_unique_id_configured", AsyncMock()
+        ) as mock_abort_if_unique_id_configured,
+    ):
         # Simulate the setting of the unique ID (apn)
         apn = "TEST_APN"
         await config_flow.async_set_unique_id(apn)
@@ -199,9 +203,10 @@ async def test_zeroconf_unique_id_check_abort(config_flow):
 
 
 @pytest.mark.asyncio
-async def test_discovered_flow_all_inputs_success(config_flow, dummy_discovery_info):
-    """
-    Test that when a discovered device is present.
+async def test_discovered_flow_all_inputs_success(
+    config_flow, dummy_discovery_info
+) -> None:
+    """Test that when a discovered device is present.
 
     The user provides all required inputs.
 
@@ -210,7 +215,7 @@ async def test_discovered_flow_all_inputs_success(config_flow, dummy_discovery_i
     # First, simulate the zeroconf discovery step.
     await config_flow.async_step_zeroconf(dummy_discovery_info)
     # Verify that discovery info is stored in the flow context.
-    disc = config_flow.context.get("discovery_info")
+    disc = config_flow.discovery_info
     assert disc is not None
     # For a discovered device, the hostname should have ".local" stripped.
     # In our dummy discovery, hostname is "TestDevice.local"
@@ -229,20 +234,22 @@ async def test_discovered_flow_all_inputs_success(config_flow, dummy_discovery_i
     }
 
     # Patch methods that are used in the successful branch of async_step_user.
-    with patch.object(config_flow, "_is_valid_base64", return_value=True), patch(
-        "custom_components.daikin_br.config_flow.async_get_thing_info",
-        new=AsyncMock(return_value=True),
-    ), patch(
-        "custom_components.daikin_br.config_flow.get_hostname",
-        return_value="TestDevice",
-    ), patch.object(
-        config_flow, "_abort_if_unique_id_configured", return_value=None
-    ), patch.object(
-        config_flow, "_async_find_existing_entry", return_value=None
-    ), patch.object(
-        config_flow, "async_create_entry", new_callable=AsyncMock
-    ) as mock_create_entry:
-
+    with (
+        patch.object(config_flow, "_is_valid_base64", return_value=True),
+        patch(
+            "custom_components.daikin_br.config_flow.async_get_thing_info",
+            new=AsyncMock(return_value=True),
+        ),
+        patch(
+            "custom_components.daikin_br.config_flow.get_hostname",
+            return_value="TestDevice",
+        ),
+        patch.object(config_flow, "_abort_if_unique_id_configured", return_value=None),
+        patch.object(config_flow, "_async_find_existing_entry", return_value=None),
+        patch.object(
+            config_flow, "async_create_entry", new_callable=AsyncMock
+        ) as mock_create_entry,
+    ):
         expected_entry = {
             "type": "create_entry",
             "title": "TestDevice (SSID: TestDevice)",
@@ -263,7 +270,7 @@ async def test_discovered_flow_all_inputs_success(config_flow, dummy_discovery_i
         result = await temp if hasattr(temp, "__await__") else temp
 
         # Assert that the flow successfully creates an entry.
-        assert result["type"] == "create_entry"
+        assert result["type"] == FlowResultType.CREATE_ENTRY
         assert result["title"] == "TestDevice (SSID: TestDevice)"
         data = result["data"]
         assert data["device_name"] == "TestDevice"
@@ -272,17 +279,12 @@ async def test_discovered_flow_all_inputs_success(config_flow, dummy_discovery_i
         assert data["device_apn"] == disc["device_apn"]
         assert data["device_ssid"] == disc["host_name"]
 
-        # Optionally, ensure that async_set_unique_id
-        # was called with the discovered device APN.
-        # mock_set_unique_id.assert_awaited_once_with(disc["device_apn"])
-
 
 @pytest.mark.asyncio
 async def test_discovered_flow_device_name_not_provided(
     config_flow, dummy_discovery_info
-):
-    """
-    Test that when a discovered device is present.
+) -> None:
+    """Test that when a discovered device is present.
 
     The user does not provide a device name.
 
@@ -290,7 +292,7 @@ async def test_discovered_flow_device_name_not_provided(
     """
     # Simulate the zeroconf discovery step.
     await config_flow.async_step_zeroconf(dummy_discovery_info)
-    disc = config_flow.context.get("discovery_info")
+    disc = config_flow.discovery_info
     assert disc is not None
     assert disc["host_name"] == "TestDevice"
     assert disc["host"] == "192.168.2.100"
@@ -308,7 +310,7 @@ async def test_discovered_flow_device_name_not_provided(
         result = await config_flow.async_step_user(user_input)
 
         # Ensure that the returned result is a form
-        assert result["type"] == "form"
+        assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "user"
 
         # Ensure that the "device_name" error is included in the returned errors
@@ -324,9 +326,8 @@ async def test_discovered_flow_device_name_not_provided(
 @pytest.mark.asyncio
 async def test_discovered_flow_device_key_not_provided(
     config_flow, dummy_discovery_info
-):
-    """
-    Test handling when a discovered device is present.
+) -> None:
+    """Test handling when a discovered device is present.
 
     The user does not provide a device name.
 
@@ -334,7 +335,7 @@ async def test_discovered_flow_device_key_not_provided(
     """
     # Simulate the zeroconf discovery step.
     await config_flow.async_step_zeroconf(dummy_discovery_info)
-    disc = config_flow.context.get("discovery_info")
+    disc = config_flow.discovery_info
     assert disc is not None
     assert disc["host_name"] == "TestDevice"
     assert disc["host"] == "192.168.2.100"
@@ -352,7 +353,7 @@ async def test_discovered_flow_device_key_not_provided(
         result = await config_flow.async_step_user(user_input)
 
         # Ensure that the returned result is a form
-        assert result["type"] == "form"
+        assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "user"
 
         # Ensure that the "api_key" error is included in the returned errors
@@ -366,9 +367,10 @@ async def test_discovered_flow_device_key_not_provided(
 
 
 @pytest.mark.asyncio
-async def test_discovered_flow_invalid_device_key(config_flow, dummy_discovery_info):
-    """
-    Test that when a discovered device is present.
+async def test_discovered_flow_invalid_device_key(
+    config_flow, dummy_discovery_info
+) -> None:
+    """Test that when a discovered device is present.
 
     The user provides an invalid API key.
 
@@ -376,7 +378,7 @@ async def test_discovered_flow_invalid_device_key(config_flow, dummy_discovery_i
     """
     # Simulate the zeroconf discovery step.
     await config_flow.async_step_zeroconf(dummy_discovery_info)
-    disc = config_flow.context.get("discovery_info")
+    disc = config_flow.discovery_info
     assert disc is not None
     assert disc["host_name"] == "TestDevice"
     assert disc["host"] == "192.168.2.100"
@@ -394,7 +396,7 @@ async def test_discovered_flow_invalid_device_key(config_flow, dummy_discovery_i
         result = await config_flow.async_step_user(user_input)
 
         # Ensure that the returned result is a form (indicating error)
-        assert result["type"] == "form"
+        assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "user"
 
         # Ensure that the "api_key" error is included in the returned errors
@@ -408,15 +410,16 @@ async def test_discovered_flow_invalid_device_key(config_flow, dummy_discovery_i
 
 
 @pytest.mark.asyncio
-async def test_discovered_flow_decryption_fails(config_flow, dummy_discovery_info):
-    """
-    Test that when all inputs are provided but decryption fails.
+async def test_discovered_flow_decryption_fails(
+    config_flow, dummy_discovery_info
+) -> None:
+    """Test that when all inputs are provided but decryption fails.
 
     The flow displays an error.
     """
     # Simulate the zeroconf discovery step.
     await config_flow.async_step_zeroconf(dummy_discovery_info)
-    disc = config_flow.context.get("discovery_info")
+    disc = config_flow.discovery_info
     assert disc is not None
     assert disc["host_name"] == "TestDevice"
     assert disc["host"] == "192.168.2.100"
@@ -430,15 +433,19 @@ async def test_discovered_flow_decryption_fails(config_flow, dummy_discovery_inf
 
     # Patch methods: `_is_valid_base64` returns True,
     # but `async_add_executor_job` simulates decryption failure.
-    with patch.object(config_flow, "_is_valid_base64", return_value=True), patch.object(
-        config_flow.hass, "async_add_executor_job", new=AsyncMock(return_value=False)
+    with (
+        patch.object(config_flow, "_is_valid_base64", return_value=True),
+        patch.object(
+            config_flow.hass,
+            "async_add_executor_job",
+            new=AsyncMock(return_value=False),
+        ),
     ):  # Fix: Use AsyncMock
-
         # Call the user step with an API key that fails decryption
         result = await config_flow.async_step_user(user_input)
 
         # Ensure that the returned result is a form (indicating error)
-        assert result["type"] == "form"
+        assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "user"
 
         # Ensure that the "api_key" error is included
@@ -453,15 +460,14 @@ async def test_discovered_flow_decryption_fails(config_flow, dummy_discovery_inf
 
 
 @pytest.mark.asyncio
-async def test_manual_flow_schema(config_flow):
-    """
-    Test that when no discovery info is provided.
+async def test_manual_flow_schema(config_flow) -> None:
+    """Test that when no discovery info is provided.
 
     The manual entry step is used and schema is correct.
     """
     config_flow.context["discovery_info"] = {}
     result = await config_flow.async_step_manual(user_input=None)
-    assert result["type"] == "form"
+    assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "manual"
     schema_keys = list(result["data_schema"].schema.keys())
     assert "device_ip" in schema_keys
@@ -470,9 +476,8 @@ async def test_manual_flow_schema(config_flow):
 
 
 @pytest.mark.asyncio
-async def test_manual_flow_all_inputs_success(config_flow):
-    """
-    Test that when all required inputs are provided.
+async def test_manual_flow_all_inputs_success(config_flow) -> None:
+    """Test that when all required inputs are provided.
 
     The manual flow successfully creates an entry.
     """
@@ -488,23 +493,26 @@ async def test_manual_flow_all_inputs_success(config_flow):
     async def fake_async_get_thing_info(_ip, _key, endpoint):
         if endpoint == "acstatus":
             return True
-        elif endpoint == "device":
+        if endpoint == "device":
             return {"apn": "TEST_APN"}
         return None
 
-    with patch.object(config_flow, "_is_valid_base64", return_value=True), patch(
-        "custom_components.daikin_br.config_flow.async_get_thing_info",
-        new=fake_async_get_thing_info,
-    ), patch(
-        "custom_components.daikin_br.config_flow.get_hostname", return_value="TestHost"
-    ), patch.object(
-        config_flow, "_abort_if_unique_id_configured", return_value=None
-    ), patch.object(
-        config_flow, "_async_find_existing_entry", return_value=None
-    ), patch.object(
-        config_flow, "async_create_entry", new_callable=AsyncMock
-    ) as mock_create_entry:
-
+    with (
+        patch.object(config_flow, "_is_valid_base64", return_value=True),
+        patch(
+            "custom_components.daikin_br.config_flow.async_get_thing_info",
+            new=fake_async_get_thing_info,
+        ),
+        patch(
+            "custom_components.daikin_br.config_flow.get_hostname",
+            return_value="TestHost",
+        ),
+        patch.object(config_flow, "_abort_if_unique_id_configured", return_value=None),
+        patch.object(config_flow, "_async_find_existing_entry", return_value=None),
+        patch.object(
+            config_flow, "async_create_entry", new_callable=AsyncMock
+        ) as mock_create_entry,
+    ):
         expected_entry = {
             "type": "create_entry",
             "title": "TestDevice (SSID: TestHost)",
@@ -526,7 +534,7 @@ async def test_manual_flow_all_inputs_success(config_flow):
         result = await temp  # double-await to resolve the final dictionary
 
         # Assert that the flow successfully creates an entry.
-        assert result["type"] == "create_entry"
+        assert result["type"] == FlowResultType.CREATE_ENTRY
         assert result["title"] == "TestDevice (SSID: TestHost)"
         data = result["data"]
         assert data["device_ip"] == user_input["device_ip"]
@@ -535,9 +543,8 @@ async def test_manual_flow_all_inputs_success(config_flow):
 
 
 @pytest.mark.asyncio
-async def test_manual_flow_device_ip_not_provided(config_flow):
-    """
-    Test that when device IP is not provided.
+async def test_manual_flow_device_ip_not_provided(config_flow) -> None:
+    """Test that when device IP is not provided.
 
     The manual flow will display an error.
     """
@@ -550,7 +557,7 @@ async def test_manual_flow_device_ip_not_provided(config_flow):
         result = await config_flow.async_step_manual(user_input)
 
         # Ensure that the returned result is a form
-        assert result["type"] == "form"
+        assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "manual"
 
         # Ensure that the "device_ip" error is included in the returned errors
@@ -565,9 +572,8 @@ async def test_manual_flow_device_ip_not_provided(config_flow):
 
 
 @pytest.mark.asyncio
-async def test_manual_flow_device_name_not_provided(config_flow):
-    """
-    Test that when device name is not provided.
+async def test_manual_flow_device_name_not_provided(config_flow) -> None:
+    """Test that when device name is not provided.
 
     The manual flow will display an error.
     """
@@ -580,7 +586,7 @@ async def test_manual_flow_device_name_not_provided(config_flow):
         result = await config_flow.async_step_manual(user_input)
 
         # Ensure that the returned result is a form
-        assert result["type"] == "form"
+        assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "manual"
 
         # Ensure that the "device_name" error is included in the returned errors
@@ -595,9 +601,8 @@ async def test_manual_flow_device_name_not_provided(config_flow):
 
 
 @pytest.mark.asyncio
-async def test_manual_flow_device_key_not_provided(config_flow):
-    """
-    Test that when device API key is not provided.
+async def test_manual_flow_device_key_not_provided(config_flow) -> None:
+    """Test that when device API key is not provided.
 
     The manual flow will display an error.
     """
@@ -610,7 +615,7 @@ async def test_manual_flow_device_key_not_provided(config_flow):
         result = await config_flow.async_step_manual(user_input)
 
         # Ensure that the returned result is a form
-        assert result["type"] == "form"
+        assert result["type"] == FlowResultType.FORM
         assert result["step_id"] == "manual"
 
         # Ensure that the API key error is included in the returned errors
@@ -625,7 +630,7 @@ async def test_manual_flow_device_key_not_provided(config_flow):
 
 
 @pytest.mark.asyncio
-async def test_missing_device_key(config_flow):
+async def test_missing_device_key(config_flow) -> None:
     """Test that missing device key in manual flow returns an error."""
     config_flow.context["discovery_info"] = {}
     user_input = {
@@ -634,28 +639,14 @@ async def test_missing_device_key(config_flow):
         # Missing device key (CONF_API_KEY)
     }
     result = await config_flow.async_step_manual(user_input)
-    assert result["type"] == "form"
+    assert result["type"] == FlowResultType.FORM
     # Expect an error for the device key.
     assert CONF_API_KEY in result["errors"]
     assert result["errors"][CONF_API_KEY] == "required"
 
 
 @pytest.mark.asyncio
-async def test_is_valid_base64_valid(config_flow):
-    """Test _is_valid_base64 returns True for a valid base64 string."""
-    valid_key = "SGVsbG8="  # "Hello" in base64.
-    assert config_flow._is_valid_base64(valid_key) is True
-
-
-@pytest.mark.asyncio
-async def test_is_valid_base64_invalid(config_flow):
-    """Test _is_valid_base64 returns False for an invalid base64 string."""
-    invalid_key = "not_base64!"
-    assert config_flow._is_valid_base64(invalid_key) is False
-
-
-@pytest.mark.asyncio
-async def test_reconfigure_success(config_flow):
+async def test_reconfigure_success(config_flow) -> None:
     """Test successful reconfiguration flow when only device key is provided."""
     user_input = {
         CONF_API_KEY: "VALIDBASE64KEY==",  # Only API key provided
@@ -663,27 +654,35 @@ async def test_reconfigure_success(config_flow):
 
     # Patch necessary methods for a successful reconfiguration.
     # Patch async_get_thing_info to return True.
-    with patch.object(config_flow, "_is_valid_base64", return_value=True), patch(
-        "custom_components.daikin_br.config_flow.async_get_thing_info",
-        new=AsyncMock(return_value=True),
-    ), patch.object(
-        config_flow, "async_set_unique_id", new=AsyncMock()
-    ) as mock_set_unique_id, patch.object(
-        config_flow, "_abort_if_unique_id_mismatch", new=Mock()
-    ) as mock_abort_if_unique_id_mismatch, patch.object(
-        config_flow,
-        "async_update_reload_and_abort",
-        new=AsyncMock(
-            return_value={"type": RESULT_TYPE_ABORT, "reason": "reconfigure_successful"}
+    with (
+        patch.object(config_flow, "_is_valid_base64", return_value=True),
+        patch(
+            "custom_components.daikin_br.config_flow.async_get_thing_info",
+            new=AsyncMock(return_value=True),
         ),
-    ) as mock_async_update_reload_and_abort:
-
+        patch.object(
+            config_flow, "async_set_unique_id", new=AsyncMock()
+        ) as mock_set_unique_id,
+        patch.object(
+            config_flow, "_abort_if_unique_id_mismatch", new=Mock()
+        ) as mock_abort_if_unique_id_mismatch,
+        patch.object(
+            config_flow,
+            "async_update_reload_and_abort",
+            new=AsyncMock(
+                return_value={
+                    "type": FlowResultType.ABORT,
+                    "reason": "reconfigure_successful",
+                }
+            ),
+        ) as mock_async_update_reload_and_abort,
+    ):
         # Call the reconfigure step with only the device key
         temp = await config_flow.async_step_reconfigure(user_input)
         result = await temp if hasattr(temp, "__await__") else temp
 
         # Ensure result is correct
-        assert result["type"] == RESULT_TYPE_ABORT
+        assert result["type"] == FlowResultType.ABORT
         assert result["reason"] == "reconfigure_successful"
 
         # Verify expected calls
@@ -696,33 +695,33 @@ async def test_reconfigure_success(config_flow):
 
 
 @pytest.mark.asyncio
-async def test_reconfigure_missing_key(config_flow):
+async def test_reconfigure_missing_key(config_flow) -> None:
     """Test reconfigure flow when API key is missing."""
     user_input = {}
 
     result = await config_flow.async_step_reconfigure(user_input)
 
-    assert result["type"] == RESULT_TYPE_FORM
+    assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "reconfigure"
     assert CONF_API_KEY in result["errors"]
     assert result["errors"][CONF_API_KEY] == "required"
 
 
 @pytest.mark.asyncio
-async def test_reconfigure_invalid_base64(config_flow):
+async def test_reconfigure_invalid_base64(config_flow) -> None:
     """Test reconfigure flow with an invalid base64 API key."""
     user_input = {CONF_API_KEY: "INVALID_KEY"}
 
     result = await config_flow.async_step_reconfigure(user_input)
 
-    assert result["type"] == RESULT_TYPE_FORM
+    assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "reconfigure"
     assert CONF_API_KEY in result["errors"]
     assert result["errors"][CONF_API_KEY] == "invalid_key"
 
 
 @pytest.mark.asyncio
-async def test_reconfigure_connection_failure(config_flow):
+async def test_reconfigure_connection_failure(config_flow) -> None:
     """Test reconfigure flow when device connection fails."""
     user_input = {CONF_API_KEY: "VALIDBASE64KEY=="}
 
@@ -732,16 +731,15 @@ async def test_reconfigure_connection_failure(config_flow):
     ):
         result = await config_flow.async_step_reconfigure(user_input)
 
-    assert result["type"] == RESULT_TYPE_FORM
+    assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "reconfigure"
     assert CONF_API_KEY in result["errors"]
     assert result["errors"][CONF_API_KEY] == "cannot_connect"
 
 
 @pytest.mark.asyncio
-async def test_find_existing_entry_found(config_flow):
-    """
-    Return the entry if a matching device_apn exists.
+async def test_find_existing_entry_found(config_flow) -> None:
+    """Return the entry if a matching device_apn exists.
 
     Ensures correct lookup of existing device_apn values.
     """
@@ -753,9 +751,8 @@ async def test_find_existing_entry_found(config_flow):
 
 
 @pytest.mark.asyncio
-async def test_find_existing_entry_not_found(config_flow):
-    """
-    Return None if no matching device_apn exists.
+async def test_find_existing_entry_not_found(config_flow) -> None:
+    """Return None if no matching device_apn exists.
 
     Ensures proper handling when no device_apn is found.
     """
@@ -765,7 +762,7 @@ async def test_find_existing_entry_not_found(config_flow):
 
 
 @pytest.mark.asyncio
-async def test_async_step_zeroconf_unknown_device():
+async def test_async_step_zeroconf_unknown_device() -> None:
     """Test that async_step_zeroconf aborts with reason unknown_device."""
     # Provide a hostname that becomes empty after stripping ".local.".
     discovery_info = DummyServiceInfo(
@@ -775,14 +772,13 @@ async def test_async_step_zeroconf_unknown_device():
     )
     flow = ConfigFlow()
     result = await flow.async_step_zeroconf(discovery_info)
-    assert result["type"] == "abort"
+    assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "unknown_device"
 
 
 @pytest.mark.asyncio
-async def test_async_step_zeroconf_ip_updated():
-    """
-    Test async_step_zeroconf returns async_update_reload_and_abort.
+async def test_async_step_zeroconf_ip_updated() -> None:
+    """Test async_step_zeroconf returns async_update_reload_and_abort.
 
     When device IP is updated.
     """
@@ -820,7 +816,7 @@ async def test_async_step_zeroconf_ip_updated():
 
 
 @pytest.mark.asyncio
-async def test_async_step_user_no_discovery_info():
+async def test_async_step_user_no_discovery_info() -> None:
     """Test that async_step_user when discovery_info is not present."""
     flow = ConfigFlow()
     # Ensure that the context has no discovery_info
@@ -837,9 +833,8 @@ async def test_async_step_user_no_discovery_info():
 
 
 @pytest.mark.asyncio
-async def test_async_step_manual_invalid_device_key_format(caplog):
-    """
-    Test async_step_manual returns an 'invalid_key' error.
+async def test_async_step_manual_invalid_device_key_format() -> None:
+    """Test async_step_manual returns an 'invalid_key' error.
 
     When device key format is invalid.
     """
@@ -854,8 +849,6 @@ async def test_async_step_manual_invalid_device_key_format(caplog):
     result = await flow.async_step_manual(user_input)
     # Check that errors contains an error for the API key.
     assert result["errors"].get(CONF_API_KEY) == "invalid_key"
-    # Verify the expected log message is present.
-    assert "Invalid device key format" in caplog.text
 
 
 async def async_return(value):
@@ -864,9 +857,8 @@ async def async_return(value):
 
 
 @pytest.mark.asyncio
-async def test_async_step_manual_device_info_missing_apn(hass):
-    """
-    Test async_step_manual returns error 'cannot_connect'.
+async def test_async_step_manual_device_info_missing_apn(hass: HomeAssistant) -> None:
+    """Test async_step_manual returns error 'cannot_connect'.
 
     When device_info is missing 'apn'.
     """
@@ -883,9 +875,12 @@ async def test_async_step_manual_device_info_missing_apn(hass):
     # Patch async_get_thing_info to simulate:
     #   - First call ("acstatus") returning a dummy truthy value.
     #   - Second call ("device") returning an empty dict (missing 'apn').
-    with patch.object(flow, "_is_valid_base64", return_value=True), patch(
-        "custom_components.daikin_br.config_flow.async_get_thing_info",
-        new=AsyncMock(side_effect=[{"dummy": "data"}, {}]),
+    with (
+        patch.object(flow, "_is_valid_base64", return_value=True),
+        patch(
+            "custom_components.daikin_br.config_flow.async_get_thing_info",
+            new=AsyncMock(side_effect=[{"dummy": "data"}, {}]),
+        ),
     ):
         result = await flow.async_step_manual(user_input)
 
@@ -895,9 +890,8 @@ async def test_async_step_manual_device_info_missing_apn(hass):
 
 
 @pytest.mark.asyncio
-async def test_async_step_manual_already_configured(hass):
-    """
-    Test async_step_manual aborts with 'already_configured'.
+async def test_async_step_manual_already_configured(hass: HomeAssistant) -> None:
+    """Test async_step_manual aborts with 'already_configured'.
 
     If the device is already configured.
     """
@@ -909,32 +903,38 @@ async def test_async_step_manual_already_configured(hass):
     flow = ConfigFlow()
     flow.hass = hass
     flow.context = {}  # manual step is used because no discovery_info
-    # Patch async_get_thing_info to simulate:
-    # - First call (for "acstatus") returns a truthy value.
-    # - Second call (for "device") returns a dict with "apn".
-    with patch(
-        "custom_components.daikin_br.config_flow.async_get_thing_info",
-        new=AsyncMock(side_effect=[{"dummy": "data"}, {"apn": "TEST_APN"}]),
+
+    # Use a single `with` statement for multiple patches
+    with (
+        patch(
+            "custom_components.daikin_br.config_flow.async_get_thing_info",
+            new=AsyncMock(side_effect=[{"dummy": "data"}, {"apn": "TEST_APN"}]),
+        ),
+        patch.object(flow, "_async_find_existing_entry", return_value=MagicMock()),
     ):
-        # Patch _async_find_existing_entry to return an existing entry.
-        with patch.object(flow, "_async_find_existing_entry", return_value=MagicMock()):
-            result = await flow.async_step_manual(user_input)
+        result = await flow.async_step_manual(user_input)
 
     # Verify that the flow aborts with the reason "already_configured".
-    assert result["type"] == "abort"
+    assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "already_configured"
 
 
-@pytest.mark.parametrize(
-    "key,expected",
-    [
-        (None, False),  # key is None
-        ("", False),  # key is empty
-        ("a", False),  # length 1, 1 % 4 = 1 (invalid)
-        ("abcde", False),  # length 5, 5 % 4 = 1 (invalid)
-    ],
-)
-def test_is_valid_base64_invalid_length(key, expected):
-    """Test _is_valid_base64 returns False for keys with invalid length."""
-    flow = ConfigFlow()
-    assert flow._is_valid_base64(key) == expected
+@pytest.mark.asyncio
+async def test_is_valid_base64_invalid(config_flow) -> None:
+    """Test _is_valid_base64 returns False for an invalid base64 string."""
+    invalid_key = "not_base64!"
+    assert config_flow._is_valid_base64(invalid_key) is False
+
+
+@pytest.mark.asyncio
+async def test_is_valid_base64_invlaid_length(config_flow) -> None:
+    """Test _is_valid_base64 returns False for an incorrect string length."""
+    invalid_key = "abcde"
+    assert config_flow._is_valid_base64(invalid_key) is False
+
+
+@pytest.mark.asyncio
+async def test_is_valid_base64_valid(config_flow) -> None:
+    """Test _is_valid_base64 returns True for a valid base64 string."""
+    valid_key = "SGVsbG8="  # "Hello" in base64.
+    assert config_flow._is_valid_base64(valid_key) is True

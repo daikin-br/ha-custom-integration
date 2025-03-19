@@ -6,24 +6,25 @@ import json
 import logging
 from typing import Any
 
-from homeassistant.components.climate import ClimateEntity
-from homeassistant.components.climate.const import (
-    PRESET_BOOST,
-    PRESET_ECO,
-    PRESET_NONE,
-    SWING_OFF,
-    SWING_VERTICAL,
-    ClimateEntityFeature,
-    HVACMode,
-)
-from homeassistant.const import ATTR_TEMPERATURE, CONF_API_KEY, UnitOfTemperature
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from pyiotdevice import (
     CommunicationErrorException,
     InvalidDataException,
     async_send_operation_data,
 )
+
+from homeassistant.components.climate import (
+    PRESET_BOOST,
+    PRESET_ECO,
+    PRESET_NONE,
+    SWING_OFF,
+    SWING_VERTICAL,
+    ClimateEntity,
+    ClimateEntityFeature,
+    HVACMode,
+)
+from homeassistant.const import ATTR_TEMPERATURE, CONF_API_KEY, UnitOfTemperature
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import DaikinConfigEntry
 from .entity import DaikinEntity
@@ -38,7 +39,7 @@ PARALLEL_UPDATES = 0
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: DaikinConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Daikin Climate device from a config entry."""
     climate_entity = DaikinClimate(entry)
@@ -79,10 +80,11 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         self._ip_address = self._host
         self._poll_interval = device_data.get("poll_interval")  # For future use
         self._command_suffix = device_data.get("command_suffix")
-
-        self._device_info = device_data
-        self._unique_id = device_data.get("device_apn")
-
+        self._device_info = dict(
+            device_data,
+            fw_ver=self.coordinator.data.get("port1", {}).get("fw_ver", "unknown"),
+        )
+        self._unique_id = str(device_data.get("device_apn", ""))
         self._power_state = 0  # default is Off
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._hvac_mode = HVACMode.OFF
@@ -183,12 +185,12 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         return self._fan_mode
 
     @property
-    def preset_modes(self) -> list[str]:
+    def preset_modes(self) -> list[str] | None:
         """Return the list of available preset modes."""
         return self._attr_preset_modes
 
     @property
-    def preset_mode(self) -> str:
+    def preset_mode(self) -> str | None:
         """Return the current preset mode."""
         return self._attr_preset_mode
 
@@ -393,7 +395,8 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
 
     async def async_set_swing_mode(self, swing_mode: str) -> None:
         """Set the vertical swing mode on the device."""
-        if swing_mode not in self._attr_swing_modes:
+        # if swing_mode not in self._attr_swing_modes:
+        if swing_mode not in (self._attr_swing_modes or []):
             _LOGGER.error("Unsupported swing mode: %s", swing_mode)
             return
 

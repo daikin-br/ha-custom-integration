@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import logging
 from typing import Any
 
+from pyiotdevice import async_get_thing_info, get_hostname
 import voluptuous as vol
+
 from homeassistant import config_entries
 from homeassistant.const import CONF_API_KEY
-from pyiotdevice import async_get_thing_info, get_hostname
-from zeroconf import ServiceInfo
+from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
+# from zeroconf import ServiceInfo
 from .const import COMMAND_SUFFIX, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,14 +44,23 @@ class ConfigFlow(config_entries.ConfigFlow):
     DOMAIN = DOMAIN
     VERSION = 1
 
+    # Add a new attribute for discovery info.
+    discovery_info: dict | None = None
+
     async def async_step_zeroconf(
-        self, discovery_info: ServiceInfo
+        self, discovery_info: ZeroconfServiceInfo
     ) -> config_entries.ConfigFlowResult:
         """Handle discovery via zeroconf."""
         _LOGGER.debug("Discovered device via zeroconf: %s", discovery_info)
 
         # Extract hostname (remove ".local" suffix), host/ip and apn
-        hostname = discovery_info.hostname.rstrip(".local.")
+        # hostname = discovery_info.hostname.rstrip(".local.")
+        hostname = discovery_info.hostname
+        if discovery_info.hostname.endswith(".local."):
+            hostname = discovery_info.hostname.removesuffix(".local.")
+        elif discovery_info.hostname.endswith(".local"):
+            hostname = discovery_info.hostname.removesuffix(".local")
+
         host = str(discovery_info.ip_address)
         apn = discovery_info.properties.get("apn")
 
@@ -87,7 +99,7 @@ class ConfigFlow(config_entries.ConfigFlow):
         }
 
         # Store discovery data for use in the next step
-        self.context["discovery_info"] = {
+        self.discovery_info = {
             "host_name": hostname,  # Store hostname without .local
             "host": host,  # Store IP address
             "device_apn": apn,
@@ -100,7 +112,8 @@ class ConfigFlow(config_entries.ConfigFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Handle user configuration step."""
-        discovery_info = self.context.get("discovery_info", {})
+        # discovery_info = self.context.get("discovery_info", {})
+        discovery_info = self.discovery_info or {}
 
         errors = {}
 
@@ -112,7 +125,6 @@ class ConfigFlow(config_entries.ConfigFlow):
         # Discovery info exists. Use discovered details.
         default_host_name = discovery_info.get("host_name", "")
         default_host = discovery_info.get("host", "")  # Discovered device IP address
-        # ip_address = f"{default_host_name}.local"
         ip_address = default_host
         device_apn = discovery_info.get("device_apn", "")
 
@@ -150,13 +162,11 @@ class ConfigFlow(config_entries.ConfigFlow):
                         "device_apn": device_apn,
                         "device_ssid": default_host_name,
                         "command_suffix": COMMAND_SUFFIX,
-                        # To be enabled later
-                        # "poll_interval": user_input["poll_interval"],
                     },
                 )
 
         # If we reach this point
-        # - it means the form has not been submitted yet or there was an error
+        # it means the form has not been submitted yet or there was an error
         return self.async_show_form(
             step_id="user",
             data_schema=DISCOVERED_SCHEMA,
@@ -257,7 +267,6 @@ class ConfigFlow(config_entries.ConfigFlow):
         old_data = entry.data
         default_host_name = old_data.get("device_ssid", "")
         default_host = old_data.get("host", "")
-        # ip_address = f"{default_host_name}.local"
         ip_address = default_host
         device_apn = old_data.get("device_apn", "")
 
@@ -304,10 +313,12 @@ class ConfigFlow(config_entries.ConfigFlow):
             if not key or len(key) % 4 not in (0, 2, 3):
                 return False
             base64.b64decode(key, validate=True)
-            return True
         # pylint: disable=broad-exception-caught
-        except Exception:
+        # except Exception:
+        except binascii.Error:
             return False
+        else:
+            return True
 
     def _async_find_existing_entry(self, device_apn):
         """Check if the device is already configured."""

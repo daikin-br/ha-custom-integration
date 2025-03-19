@@ -5,11 +5,12 @@ from __future__ import annotations
 import datetime
 import logging
 
+from pyiotdevice import async_get_thing_info
+
 from homeassistant.const import CONF_API_KEY, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.device_registry import DeviceEntry
-from pyiotdevice import async_get_thing_info
 
 from .const import DOMAIN, POLL_INTERVAL
 from .coordinator import DaikinConfigEntry, DaikinDataUpdateCoordinator, UpdateFailed
@@ -17,6 +18,16 @@ from .coordinator import DaikinConfigEntry, DaikinDataUpdateCoordinator, UpdateF
 PLATFORMS = [Platform.CLIMATE]
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _raise_invalid_response(device_apn: str) -> None:
+    """Raise an UpdateFailed exception indicating that the device is unavailable due to an invalid response.
+
+    Args:
+        device_apn (str): The APN of the device which is unavailable.
+
+    """
+    raise UpdateFailed(f"The device {device_apn} is unavailable: Invalid response")
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bool:
@@ -38,9 +49,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
         status = await async_get_thing_info(ip_address, device_key, "acstatus")
 
         if not isinstance(status, dict):
-            raise UpdateFailed(
-                f"The device {device_apn} is unavailable: Invalid response"
-            )
+            _raise_invalid_response(device_apn)
 
     except UpdateFailed as ex:
         _LOGGER.debug("Update failed for device %s: %s", device_apn, ex)

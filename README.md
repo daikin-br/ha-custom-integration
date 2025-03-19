@@ -7,10 +7,9 @@ This Home Assistant integration supports the Brazilian version of Daikin Smart A
 - [iOS](https://apps.apple.com/br/app/daikin-smart-ac/id1557849398)
 
 - [Android](https://play.google.com/store/apps/details?id=in.co.iotalabs.dmb.smartac)
-  
 
 ## Prerequisites
-  
+
 - The Daikin air conditioning device must already be added to your account using the Daikin Smart AC mobile app.
 
 - The integration requires a **Device Key**. To retrieve the Device Key for the SSID (shown in the Home Assistant configuration UI during setup), open the Daikin Smart AC mobile app, navigate to **Menu -> Integrations -> Home Assistant**, enter or select the SSID, and press **Submit**.
@@ -20,12 +19,11 @@ This Home Assistant integration supports the Brazilian version of Daikin Smart A
 1. Download it with HACS
 2. Restart Home Assistant
 3. In the HA UI:
-    - Go to "Settings" -> "Devices & Services" -> "Integrations",  click "+" and search for "**Daikin Smart AC**"
+   - Go to "Settings" -> "Devices & Services" -> "Integrations", click "+" and search for "**Daikin Smart AC**"
 4. If "**Daikin Smart AC**" is not available then ADD it manually as shown below:
 
 ![Add Repository](images/ha-custom-repo-setup-1.png "Add Repository")
 ![Add Repository](images/ha-custom-repo-setup-2.png "Add Repository")
-
 
 ## Configuration
 
@@ -36,6 +34,7 @@ To add the **Daikin Smart AC** integration to your Home Assistant instance, use 
 Daikin Smart AC can be **auto-discovered** by Home Assistant. If an instance was found, it will be shown as **Discovered Device: DAIKINXXXXXX**. You can then click on `ADD` and follow the on screen instructions to set it up.
 
 If it wasn’t discovered automatically, You can set up a manual integration entry:
+
 - Browse to your Home Assistant instance.
 - Go to Settings -> Devices & Services.
 - In the bottom right corner, select the Add Integration button.
@@ -70,25 +69,55 @@ The `daikin_br` climate platform integrates Daikin air conditioning systems with
 
 - [**Preset Mode**](https://www.home-assistant.io/integrations/climate#action-climateset_preset_mode) (eco, boost)
 
-Current ambient temperature is also displayed.
+The Current ambient temperature is also displayed.
 
 ## Data updates
 
-The integration fetches data from the device every 10 seconds by default. 
+The integration fetches data from the device every 10 seconds by default.
 It is recommended not to reduce the polling time below 10 seconds. For users who want to set their own custom polling interval, they can [configure a custom polling interval](https://www.home-assistant.io/common-tasks/general/#defining-a-custom-polling-interval).
-
 
 ## Known limitations
 
-There are no known limitations for this integration.
+Preset mode `Coanda` is currently not supported.
 
 ## Troubleshooting
 
-There are no commonly known issues with this integration.
+### Can’t setup the device
+
+#### Symptom: “Failed to connect”
+
+When trying to setup the integration, the form shows the message “Failed to connect”.
+
+##### Description
+
+This indicates that either the device has gone offline or network firewall settings are blocking local communication.
+
+##### Resolution
+
+To resolve this issue, try the following steps:
+
+1. Make sure your device is powered up.
+2. Make sure your device is connected to the network:
+   - Make sure the app of the manufacturer can see and operate the device.
+3. Make sure the network firewall settings are not blocking the local communication on port 15914.
+
+### I deleted my device from the manufacturer's app and added it again. After this, my device in Home Assistant appears offline or unavailable.
+
+Reconfigure the device.
+
+### The device is not getting auto discovered.
+
+Make sure the network firewall settings are not blocking default mDNS port.
+
+### The device is appearing offline or unavailable.
+
+Make sure the device is visible and controllable via the manufacturer's app.
+If it is not, check the device's power and network connection.
 
 ## Removing the integration
 
 This integration follows standard integration removal. No extra steps are required. Refer to [Removing an integration instance](https://www.home-assistant.io/common-tasks/general/#removing-an-integration-instance) for details.
+
 1. In Home Assistant, go to [**Setting->Device & Services**](https://my.home-assistant.io/redirect/integrations/).
 2. Select the **Daikin Smart AC** integration and in the three-dot menu (⋮), select **Delete**.
 3. [Restart Home Assistant](https://www.home-assistant.io/docs/configuration/#reloading-the-configuration-to-apply-changes).
@@ -97,4 +126,4 @@ This integration follows standard integration removal. No extra steps are requir
 
 If you want to contribute to this please read the [Contribution guidelines](CONTRIBUTING.md)
 
-***
+---

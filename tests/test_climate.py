@@ -4,8 +4,12 @@ import json
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from pyiotdevice import InvalidDataException
 import pytest
-from homeassistant.components.climate.const import (
+
+from custom_components.daikin_br.climate import DaikinClimate, async_setup_entry
+from custom_components.daikin_br.const import DOMAIN
+from homeassistant.components.climate import (
     PRESET_BOOST,
     PRESET_ECO,
     PRESET_NONE,
@@ -15,46 +19,25 @@ from homeassistant.components.climate.const import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
-from pyiotdevice import InvalidDataException
-
-from custom_components.daikin_br.climate import DaikinClimate, async_setup_entry
-from custom_components.daikin_br.const import DOMAIN
+from homeassistant.core import HomeAssistant
 
 
 # pylint: disable=redefined-outer-name, too-few-public-methods
 # pylint: disable=too-many-instance-attributes, too-many-lines
 # pylint: disable=protected-access
-class MockConfigEntry(ConfigEntry):
-    """A minimal mock of a Home Assistant config entry for testing purposes."""
-
-    def __init__(self, domain, data, unique_id, title="Test"):
-        """Initilize MockConfig Entry."""
-        self.version = 1
-        self.domain = domain
-        self.data = data
-        self.unique_id = unique_id
-        self.title = title
-        self.entry_id = "mock_entry_id"
-        self.source = "user"
-        self.runtime_data = None
-
-    def add_to_hass(self, hass):
-        """Add to hass."""
-        hass.config_entries.async_add(self)
-
-
 @pytest.fixture
-def dummy_coordinator(hass):
+def dummy_coordinator(hass: HomeAssistant):
     """Create a dummy coordinator for testing purposes."""
     coordinator = MagicMock()
     coordinator.data = {"port1": {"fw_ver": "1.0.0"}}
     coordinator.hass = hass
     coordinator.last_update_success = True
+    coordinator.async_request_refresh = AsyncMock()
     return coordinator
 
 
 @pytest.fixture
-def mock_config_entry(dummy_coordinator, monkeypatch):
+def mock_config_entry(dummy_coordinator):
     """Fixture to create a valid Home Assistant config entry with runtime_data."""
     entry_data = {
         "device_apn": "TEST_APN",
@@ -62,21 +45,25 @@ def mock_config_entry(dummy_coordinator, monkeypatch):
         "api_key": "VALID_KEY",
         "device_name": "TEST DEVICE",
     }
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data=entry_data,
-        unique_id="test_entry_id",
-    )
-    # Use monkeypatch to set the runtime_data attribute on the entry.
-    monkeypatch.setattr(entry, "runtime_data", dummy_coordinator)
+
+    entry = MagicMock(spec=ConfigEntry)
+    entry.domain = DOMAIN
+    entry.data = entry_data
+    entry.unique_id = "test_entry_id"
+    entry.entry_id = "mock_entry_id"
+    entry.source = "user"
+    entry.runtime_data = dummy_coordinator  # Set runtime_data for access in tests
+
     return entry
 
 
 @pytest.mark.asyncio
-async def test_async_setup_entry_success(hass, mock_config_entry):
+async def test_async_setup_entry_success(
+    hass: HomeAssistant, mock_config_entry
+) -> None:
     """Test that async_setup_entry sets up the climate entity."""
-    # Create a dummy async_add_entities as an AsyncMock.
-    async_add_entities = AsyncMock()
+    # Create a dummy async_add_entities as a MagicMock instead of AsyncMock
+    async_add_entities = MagicMock()
 
     # Ensure that the runtime_data on the config entry (provided by mock_config_entry)
     # has an async_request_refresh method.
@@ -84,7 +71,7 @@ async def test_async_setup_entry_success(hass, mock_config_entry):
 
     await async_setup_entry(hass, mock_config_entry, async_add_entities)
 
-    # Since async_setup_entry doesn't explicitly return a value, result is None.
+    # Verify that async_add_entities was called correctly
     async_add_entities.assert_called_once()
     args, _kwargs = async_add_entities.call_args
     assert isinstance(args[0], list)
@@ -92,12 +79,14 @@ async def test_async_setup_entry_success(hass, mock_config_entry):
     climate_entity = args[0][0]
     assert isinstance(climate_entity, DaikinClimate)
 
-    # Verify that the coordinator's async_request_refresh was called.
+    # Verify that the coordinator's async_request_refresh was awaited
     mock_config_entry.runtime_data.async_request_refresh.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_async_set_hvac_mode(hass, caplog, mock_config_entry):
+async def test_async_set_hvac_mode(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, mock_config_entry
+) -> None:
     """Test setting various HVAC modes in DaikinClimate."""
     # Create the DaikinClimate entity using the config entry.
     climate_entity = DaikinClimate(mock_config_entry)
@@ -129,7 +118,12 @@ async def test_async_set_hvac_mode(hass, caplog, mock_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_async_set_fan_mode(monkeypatch, hass, caplog, mock_config_entry):
+async def test_async_set_fan_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    mock_config_entry,
+) -> None:
     """Test setting various fan modes in DaikinClimate."""
     # Initialize DaikinClimate instance using the mock config entry.
     climate_entity = DaikinClimate(mock_config_entry)
@@ -144,9 +138,9 @@ async def test_async_set_fan_mode(monkeypatch, hass, caplog, mock_config_entry):
 
     # --- Test valid fan modes when HVAC mode is COOL ---
     monkeypatch.setattr(climate_entity, "_hvac_mode", HVACMode.COOL)
-    assert (
-        climate_entity.hvac_mode == HVACMode.COOL
-    ), f"Expected HVAC mode COOL, got {climate_entity.hvac_mode}"
+    assert climate_entity.hvac_mode == HVACMode.COOL, (
+        f"Expected HVAC mode COOL, got {climate_entity.hvac_mode}"
+    )
 
     test_cases = {
         "auto": {"port1": {"fan": 17}},
@@ -166,9 +160,9 @@ async def test_async_set_fan_mode(monkeypatch, hass, caplog, mock_config_entry):
 
     # --- Test fan mode change when HVAC mode is DRY (should not send command) ---
     monkeypatch.setattr(climate_entity, "_hvac_mode", HVACMode.DRY)
-    assert (
-        climate_entity.hvac_mode == HVACMode.DRY
-    ), f"Expected HVAC mode DRY, got {climate_entity.hvac_mode}"
+    assert climate_entity.hvac_mode == HVACMode.DRY, (
+        f"Expected HVAC mode DRY, got {climate_entity.hvac_mode}"
+    )
     caplog.clear()
     await climate_entity.async_set_fan_mode("medium")
     # Assert that no command is sent when in DRY mode.
@@ -185,7 +179,12 @@ async def test_async_set_fan_mode(monkeypatch, hass, caplog, mock_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_async_set_temperature(monkeypatch, hass, caplog, mock_config_entry):
+async def test_async_set_temperature(
+    monkeypatch: pytest.MonkeyPatch,
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    mock_config_entry,
+) -> None:
     """Test setting various temperature values in DaikinClimate."""
     # Create the climate entity using the mock config entry.
     climate_entity = DaikinClimate(mock_config_entry)
@@ -236,7 +235,12 @@ async def test_async_set_temperature(monkeypatch, hass, caplog, mock_config_entr
 
 
 @pytest.mark.asyncio
-async def test_async_set_preset_mode(monkeypatch, hass, caplog, mock_config_entry):
+async def test_async_set_preset_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    mock_config_entry,
+) -> None:
     """Test setting preset modes in DaikinClimate."""
     # Create DaikinClimate instance using the mock config entry.
     climate_entity = DaikinClimate(mock_config_entry)
@@ -291,7 +295,12 @@ async def test_async_set_preset_mode(monkeypatch, hass, caplog, mock_config_entr
 
 
 @pytest.mark.asyncio
-async def test_async_set_swing_mode(monkeypatch, hass, caplog, mock_config_entry):
+async def test_async_set_swing_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    mock_config_entry,
+) -> None:
     """Test setting swing modes in DaikinClimate."""
     # Create the DaikinClimate entity using the config entry.
     climate_entity = DaikinClimate(mock_config_entry)
@@ -332,7 +341,7 @@ async def test_async_set_swing_mode(monkeypatch, hass, caplog, mock_config_entry
 
 
 @pytest.mark.asyncio
-async def test_set_thing_state_success(hass, mock_config_entry):
+async def test_set_thing_state_success(hass: HomeAssistant, mock_config_entry) -> None:
     """Test that set_thing_state updates the entity state as expected."""
     # Use the config entry fixture that already has runtime_data set.
     entry = mock_config_entry
@@ -369,37 +378,37 @@ async def test_set_thing_state_success(hass, mock_config_entry):
         await climate_entity.set_thing_state(payload)
 
     # Now verify the updated state via the public properties.
-    assert (
-        climate_entity.power_state == 1
-    ), f"Expected power_state 1, got {climate_entity.power_state}"
-    assert (
-        climate_entity.hvac_mode == HVACMode.COOL
-    ), f"Expected HVACMode.COOL, got {climate_entity.hvac_mode}"
-    assert (
-        climate_entity.target_temperature == 22
-    ), f"Expected target_temperature 22, got {climate_entity.target_temperature}"
-    assert (
-        climate_entity.current_temperature == 23
-    ), f"Expected current_temperature 23, got {climate_entity.current_temperature}"
+    assert climate_entity.power_state == 1, (
+        f"Expected power_state 1, got {climate_entity.power_state}"
+    )
+    assert climate_entity.hvac_mode == HVACMode.COOL, (
+        f"Expected HVACMode.COOL, got {climate_entity.hvac_mode}"
+    )
+    assert climate_entity.target_temperature == 22, (
+        f"Expected target_temperature 22, got {climate_entity.target_temperature}"
+    )
+    assert climate_entity.current_temperature == 23, (
+        f"Expected current_temperature 23, got {climate_entity.current_temperature}"
+    )
     # For fan_mode, a value of 5 should map to "medium" according to your mapping.
-    assert (
-        climate_entity.fan_mode == "medium"
-    ), f"Expected fan_mode 'medium', got {climate_entity.fan_mode}"
+    assert climate_entity.fan_mode == "medium", (
+        f"Expected fan_mode 'medium', got {climate_entity.fan_mode}"
+    )
     # For swing_mode, a value of 1 should yield SWING_VERTICAL.
-    assert (
-        climate_entity.swing_mode == SWING_VERTICAL
-    ), f"Expected swing_mode '{SWING_VERTICAL}', got {climate_entity.swing_mode}"
+    assert climate_entity.swing_mode == SWING_VERTICAL, (
+        f"Expected swing_mode '{SWING_VERTICAL}', got {climate_entity.swing_mode}"
+    )
     # For preset_mode, econo=1 and powerchill=0 should yield PRESET_ECO.
-    assert (
-        climate_entity.preset_mode == PRESET_ECO
-    ), f"Expected preset_mode '{PRESET_ECO}', got {climate_entity.preset_mode}"
+    assert climate_entity.preset_mode == PRESET_ECO, (
+        f"Expected preset_mode '{PRESET_ECO}', got {climate_entity.preset_mode}"
+    )
 
     # Verify that async_write_ha_state was called once.
     climate_entity.async_write_ha_state.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_update_entity_properties(mock_config_entry):
+async def test_update_entity_properties(mock_config_entry) -> None:
     """Test that update_entity_properties updates internal state correctly."""
     # Instantiate the DaikinClimate entity using the config entry.
     climate_entity = DaikinClimate(mock_config_entry)
@@ -471,7 +480,9 @@ async def test_update_entity_properties(mock_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_update_entity_properties_device_off(mock_config_entry, hass):
+async def test_update_entity_properties_device_off(
+    mock_config_entry, hass: HomeAssistant
+) -> None:
     """Test update_entity_properties when the device is OFF."""
     # Create the DaikinClimate entity using the config entry fixture.
     climate_entity = DaikinClimate(mock_config_entry)
@@ -498,35 +509,35 @@ async def test_update_entity_properties_device_off(mock_config_entry, hass):
     climate_entity.update_entity_properties(port_status)
 
     # Verify that the public properties reflect the expected state.
-    assert (
-        climate_entity.current_temperature == 23
-    ), f"Expected current_temperature 23, got {climate_entity.current_temperature}"
-    assert (
-        climate_entity.target_temperature == 22
-    ), f"Expected target_temperature 22, got {climate_entity.target_temperature}"
-    assert (
-        climate_entity.power_state == 0
-    ), f"Expected power_state 0, got {climate_entity.power_state}"
-    assert (
-        climate_entity.hvac_mode == HVACMode.OFF
-    ), f"Expected HVACMode.OFF, got {climate_entity.hvac_mode}"
+    assert climate_entity.current_temperature == 23, (
+        f"Expected current_temperature 23, got {climate_entity.current_temperature}"
+    )
+    assert climate_entity.target_temperature == 22, (
+        f"Expected target_temperature 22, got {climate_entity.target_temperature}"
+    )
+    assert climate_entity.power_state == 0, (
+        f"Expected power_state 0, got {climate_entity.power_state}"
+    )
+    assert climate_entity.hvac_mode == HVACMode.OFF, (
+        f"Expected HVACMode.OFF, got {climate_entity.hvac_mode}"
+    )
     # Assuming your mapping converts fan value 3 to "low".
-    assert (
-        climate_entity.fan_mode == "low"
-    ), f"Expected fan_mode 'low', got {climate_entity.fan_mode}"
-    assert (
-        climate_entity.swing_mode == SWING_OFF
-    ), f"Expected swing_mode {SWING_OFF}, got {climate_entity.swing_mode}"
-    assert (
-        climate_entity.preset_mode == PRESET_NONE
-    ), f"Expected preset_mode {PRESET_NONE}, got {climate_entity.preset_mode}"
+    assert climate_entity.fan_mode == "low", (
+        f"Expected fan_mode 'low', got {climate_entity.fan_mode}"
+    )
+    assert climate_entity.swing_mode == SWING_OFF, (
+        f"Expected swing_mode {SWING_OFF}, got {climate_entity.swing_mode}"
+    )
+    assert climate_entity.preset_mode == PRESET_NONE, (
+        f"Expected preset_mode {PRESET_NONE}, got {climate_entity.preset_mode}"
+    )
 
     # Verify that async_write_ha_state was called once.
     climate_entity.async_write_ha_state.assert_called_once()
 
 
 @pytest.mark.parametrize(
-    "hvac_value, expected_mode",
+    ("hvac_value", "expected_mode"),
     [
         (0, HVACMode.OFF),
         (6, HVACMode.FAN_ONLY),
@@ -537,9 +548,8 @@ async def test_update_entity_properties_device_off(mock_config_entry, hass):
         (99, HVACMode.OFF),  # Unknown value should default to HVACMode.OFF
     ],
 )
-def test_map_hvac_mode(mock_config_entry, hvac_value, expected_mode):
-    """
-    Test map_hvac_mode method.
+def test_map_hvac_mode(mock_config_entry, hvac_value, expected_mode) -> None:
+    """Test map_hvac_mode method.
 
     This ensures that device-specific HVAC mode values are correctly mapped
     to Home Assistant HVAC modes.
@@ -551,7 +561,7 @@ def test_map_hvac_mode(mock_config_entry, hvac_value, expected_mode):
 
 
 @pytest.mark.parametrize(
-    "fan_value, expected_mode",
+    ("fan_value", "expected_mode"),
     [
         (17, "auto"),
         (7, "high"),
@@ -563,9 +573,8 @@ def test_map_hvac_mode(mock_config_entry, hvac_value, expected_mode):
         (99, "auto"),  # Unknown value should default to "auto"
     ],
 )
-def test_map_fan_speed(mock_config_entry, fan_value, expected_mode):
-    """
-    Test map_fan_speed method for correct fan speed mappings.
+def test_map_fan_speed(mock_config_entry, fan_value, expected_mode) -> None:
+    """Test map_fan_speed method for correct fan speed mappings.
 
     This ensures that the device-specific fan speed values are correctly mapped
     to Home Assistant fan mode strings.
@@ -577,7 +586,7 @@ def test_map_fan_speed(mock_config_entry, fan_value, expected_mode):
 
 
 @pytest.mark.parametrize(
-    "temperature, expected_temperature",
+    ("temperature", "expected_temperature"),
     [
         (22, 22),  # Valid temperature.
         (30, 30),  # Valid upper limit.
@@ -588,9 +597,8 @@ def test_map_fan_speed(mock_config_entry, fan_value, expected_mode):
 )
 def test_target_temperature_property(
     temperature, expected_temperature, mock_config_entry
-):
-    """
-    Test that update_entity_properties sets the target temperature correctly.
+) -> None:
+    """Test that update_entity_properties sets the target temperature correctly.
 
     A dummy device status dict with only the "temperature" key is used.
     """
@@ -610,15 +618,15 @@ def test_target_temperature_property(
 
 
 @pytest.mark.parametrize(
-    "swing_mode, expected_swing_mode",
+    ("swing_mode", "expected_swing_mode"),
     [
         (SWING_OFF, SWING_OFF),  # Swing off.
         (SWING_VERTICAL, SWING_VERTICAL),  # Vertical swing.
     ],
 )
 def test_swing_mode_property(
-    monkeypatch, swing_mode, expected_swing_mode, mock_config_entry
-):
+    monkeypatch: pytest.MonkeyPatch, swing_mode, expected_swing_mode, mock_config_entry
+) -> None:
     """Test that the swing_mode property returns the correct swing mode."""
     # Create the DaikinClimate instance using the mock_config_entry fixture.
     climate_entity = DaikinClimate(mock_config_entry)
@@ -631,7 +639,7 @@ def test_swing_mode_property(
 
 
 @pytest.mark.parametrize(
-    "preset_mode, expected_preset_mode",
+    ("preset_mode", "expected_preset_mode"),
     [
         (PRESET_ECO, PRESET_ECO),  # Economy mode.
         (PRESET_BOOST, PRESET_BOOST),  # Power chill mode.
@@ -639,8 +647,11 @@ def test_swing_mode_property(
     ],
 )
 def test_preset_mode_property(
-    monkeypatch, preset_mode, expected_preset_mode, mock_config_entry
-):
+    monkeypatch: pytest.MonkeyPatch,
+    preset_mode,
+    expected_preset_mode,
+    mock_config_entry,
+) -> None:
     """Test that the preset_mode property returns the correct value."""
     # Create a DaikinClimate instance using the mock_config_entry fixture.
     climate_entity = DaikinClimate(mock_config_entry)
@@ -652,7 +663,7 @@ def test_preset_mode_property(
     assert climate_entity.preset_mode == expected_preset_mode
 
 
-def test_property_getters(mock_config_entry):
+def test_property_getters(mock_config_entry) -> None:
     """Test the property getters of DaikinClimate."""
     # Create the DaikinClimate entity using the mock_config_entry fixture.
     # The mock_config_entry fixture provides an entry with device_apn "TEST_APN",
@@ -669,7 +680,7 @@ def test_property_getters(mock_config_entry):
     assert climate_entity.target_temperature_step == 1.0
 
 
-def test_device_info(mock_config_entry):
+def test_device_info(mock_config_entry) -> None:
     """Test the device_info property of DaikinClimate."""
     # Create the DaikinClimate entity using the config entry fixture.
     climate_entity = DaikinClimate(mock_config_entry)
@@ -679,8 +690,7 @@ def test_device_info(mock_config_entry):
     expected_name = "TEST DEVICE"
     expected_manufacturer = "Daikin"
     expected_model = "Smart AC Series"
-    # Our fixture doesn't set a firmware version so we expect None.
-    expected_sw_version = None
+    expected_sw_version = "1.0.0"
 
     # Retrieve the device_info property.
     device_info = climate_entity.device_info
@@ -696,7 +706,9 @@ def test_device_info(mock_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_set_thing_state_exception(hass, caplog, mock_config_entry):
+async def test_set_thing_state_exception(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, mock_config_entry
+) -> None:
     """Test that set_thing_state logs an error when async_send_operation_data fails."""
     # Create the DaikinClimate entity using the config entry fixture.
     entity = DaikinClimate(mock_config_entry)
@@ -722,8 +734,11 @@ async def test_set_thing_state_exception(hass, caplog, mock_config_entry):
 
 @pytest.mark.asyncio
 async def test_async_set_preset_mode_unsupported(
-    monkeypatch, hass, caplog, mock_config_entry
-):
+    monkeypatch: pytest.MonkeyPatch,
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    mock_config_entry,
+) -> None:
     """Test unsupported preset mode."""
     # Create the DaikinClimate entity using the config entry fixture.
     climate_entity = DaikinClimate(mock_config_entry)
@@ -754,9 +769,10 @@ async def test_async_set_preset_mode_unsupported(
 
 
 @pytest.mark.asyncio
-async def test_handle_coordinator_update_exception(hass, caplog, mock_config_entry):
-    """
-    Test that _handle_coordinator_update marks the entity as unavailable.
+async def test_handle_coordinator_update_exception(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, mock_config_entry
+) -> None:
+    """Test that _handle_coordinator_update marks the entity as unavailable.
 
     When update_entity_properties fails.
     """
@@ -782,7 +798,9 @@ async def test_handle_coordinator_update_exception(hass, caplog, mock_config_ent
 
 
 @pytest.mark.asyncio
-async def test_async_set_hvac_mode_unsupported(hass, caplog, mock_config_entry):
+async def test_async_set_hvac_mode_unsupported(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, mock_config_entry
+) -> None:
     """Test unsupported HVAC mode."""
     # Create the DaikinClimate entity using the config entry fixture.
     entity = DaikinClimate(mock_config_entry)
@@ -801,7 +819,9 @@ async def test_async_set_hvac_mode_unsupported(hass, caplog, mock_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_async_set_fan_mode_unsupported(hass, caplog, mock_config_entry):
+async def test_async_set_fan_mode_unsupported(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, mock_config_entry
+) -> None:
     """Test unsupported fan mode."""
     # Create the DaikinClimate entity using the mock config entry fixture.
     entity = DaikinClimate(mock_config_entry)
@@ -817,32 +837,10 @@ async def test_async_set_fan_mode_unsupported(hass, caplog, mock_config_entry):
     entity.set_thing_state.assert_not_called()
 
 
-# # @pytest.mark.asyncio
-# # async def test_async_set_temperature_in_fan_only(dummy_coordinator, hass, caplog):
-# #     """Test set temperate in fan mode."""
-# #     entry_data = {
-# #         "device_apn": "TEST_APN",
-# #         "host": "192.168.1.100",
-# #         "api_key": "VALID_KEY",
-# #         "device_name": "TEST DEVICE",
-# #     }
-# #     entity = DaikinClimate(entry_data, dummy_coordinator)
-# #     entity.hass = hass
-# #     entity.set_thing_state = AsyncMock()
-# #     entity.async_write_ha_state = MagicMock()
-# #     entity._hvac_mode = HVACMode.FAN_ONLY
-# #     await entity.async_set_temperature(**{ATTR_TEMPERATURE: 24})
-# #     assert any(
-# #         "Temperature cannot be changed in" in record.message
-# #         for record in caplog.records
-# #     )
-# #     entity.set_thing_state.assert_not_called()
-# #     # Also verify that _target_temperature is set to 24 (reverting change)
-# #     assert entity._target_temperature == 24
-
-
 @pytest.mark.asyncio
-async def test_async_set_temperature_in_dry(monkeypatch, hass, mock_config_entry):
+async def test_async_set_temperature_in_dry(
+    monkeypatch: pytest.MonkeyPatch, hass: HomeAssistant, mock_config_entry
+) -> None:
     """Test that setting temperature in DRY mode does not send a command."""
     # Create a DaikinClimate entity using the config entry fixture.
     climate_entity = DaikinClimate(mock_config_entry)
@@ -867,9 +865,10 @@ async def test_async_set_temperature_in_dry(monkeypatch, hass, mock_config_entry
 
 
 @pytest.mark.asyncio
-async def test_set_thing_state_preset_boost_and_none(hass, mock_config_entry):
-    """
-    Test that set_thing_state updates the preset mode correctly.
+async def test_set_thing_state_preset_boost_and_none(
+    hass: HomeAssistant, mock_config_entry
+) -> None:
+    """Test that set_thing_state updates the preset mode correctly.
 
     First, when powerchill equals 1, the preset mode should be PRESET_BOOST.
     Then, when both econo and powerchill equal 0, the preset mode should be PRESET_NONE.
@@ -928,9 +927,10 @@ async def test_set_thing_state_preset_boost_and_none(hass, mock_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_set_thing_state_preset_boost(hass, mock_config_entry):
-    """
-    Test that set_thing_state updates the preset mode to PRESET_BOOST.
+async def test_set_thing_state_preset_boost(
+    hass: HomeAssistant, mock_config_entry
+) -> None:
+    """Test that set_thing_state updates the preset mode to PRESET_BOOST.
 
     When the response indicates that powerchill equals 1.
     """
@@ -971,7 +971,9 @@ async def test_set_thing_state_preset_boost(hass, mock_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_set_thing_state_invalid_data_exception(hass, caplog, mock_config_entry):
+async def test_set_thing_state_invalid_data_exception(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, mock_config_entry
+) -> None:
     """Test that set_thing_state logs an error when InvalidDataException is raised."""
     # Create the DaikinClimate entity using the config entry fixture.
     # The fixture 'mock_config_entry' already sets runtime_data.
@@ -997,9 +999,10 @@ async def test_set_thing_state_invalid_data_exception(hass, caplog, mock_config_
 
 
 @pytest.mark.asyncio
-async def test_handle_coordinator_update_missing_data(hass, mock_config_entry):
-    """
-    Test that _handle_coordinator_update sets _attr_available to False.
+async def test_handle_coordinator_update_missing_data(
+    hass: HomeAssistant, mock_config_entry
+) -> None:
+    """Test that _handle_coordinator_update sets _attr_available to False.
 
     When the coordinator data is missing the expected 'port1' key.
     """
@@ -1021,10 +1024,9 @@ async def test_handle_coordinator_update_missing_data(hass, mock_config_entry):
 
 @pytest.mark.asyncio
 async def test_handle_coordinator_update_valid_calls_write_state(
-    hass, mock_config_entry
-):
-    """
-    Test that _handle_coordinator_update sets the entity as available.
+    hass: HomeAssistant, mock_config_entry
+) -> None:
+    """Test that _handle_coordinator_update sets the entity as available.
 
     Calls update_entity_properties with valid data.
     """

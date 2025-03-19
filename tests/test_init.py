@@ -3,10 +3,6 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from homeassistant.const import CONF_API_KEY
-from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.daikin_br import (
     PLATFORMS,
@@ -19,6 +15,12 @@ from custom_components.daikin_br.coordinator import (
     DaikinDataUpdateCoordinator,
     UpdateFailed,
 )
+from homeassistant.const import CONF_API_KEY
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+
+from tests.common import MockConfigEntry
 
 
 # pylint: disable=redefined-outer-name, too-few-public-methods
@@ -38,7 +40,7 @@ class DummyConfigEntry:
 class DummyCoordinator:
     """Dummy coordinator to simulate runtime_data."""
 
-    def __init__(self, data):
+    def __init__(self, data) -> None:
         """Initialize dummy coordinator."""
         self.data = data  # For example, a dict of device identifiers
 
@@ -47,7 +49,7 @@ class DummyCoordinator:
 class DummyDeviceEntry:
     """Dummy device entry that mimics a Home Assistant DeviceEntry."""
 
-    def __init__(self, identifiers):
+    def __init__(self, identifiers) -> None:
         """Initialize dummy device entry."""
         # identifiers should be an iterable (e.g. a set) of tuples.
         self.identifiers = identifiers
@@ -67,10 +69,9 @@ def dummy_config_entry():
 @pytest.mark.parametrize("missing_key", [CONF_API_KEY, "host", "device_apn"])
 @pytest.mark.asyncio
 async def test_setup_entry_missing_required_data(
-    hass, caplog, dummy_config_entry, missing_key
+    hass: HomeAssistant, caplog, dummy_config_entry, missing_key
 ):
-    """
-    Test that async_setup_entry returns False and logs an error when required.
+    """Test that async_setup_entry returns False and logs an error when required.
 
     Configuration data is missing.
     """
@@ -92,9 +93,8 @@ async def test_setup_entry_missing_required_data(
 
 
 @pytest.mark.asyncio
-async def test_setup_entry_update_failed(hass, dummy_config_entry):
-    """
-    Test that async_setup_entry raises ConfigEntryNotReady.
+async def test_setup_entry_update_failed(hass: HomeAssistant, dummy_config_entry):
+    """Test that async_setup_entry raises ConfigEntryNotReady.
 
     When the coordinator's first refresh raises UpdateFailed.
     """
@@ -108,18 +108,21 @@ async def test_setup_entry_update_failed(hass, dummy_config_entry):
     entry = dummy_config_entry(data)
 
     # Patch async_get_thing_info to simulate UpdateFailed.
-    with patch(
-        "custom_components.daikin_br.async_get_thing_info",
-        new=AsyncMock(side_effect=UpdateFailed("Test update failed")),
+    with (
+        patch(
+            "custom_components.daikin_br.async_get_thing_info",
+            new=AsyncMock(side_effect=UpdateFailed("Test update failed")),
+        ),
+        pytest.raises(ConfigEntryNotReady),
     ):
-        with pytest.raises(ConfigEntryNotReady):
-            await async_setup_entry(hass, entry)
+        await async_setup_entry(hass, entry)
 
 
 @pytest.mark.asyncio
-async def test_setup_entry_unexpected_exception(hass, dummy_config_entry):
-    """
-    Test that async_setup_entry raises ConfigEntryNotReady.
+async def test_setup_entry_unexpected_exception(
+    hass: HomeAssistant, dummy_config_entry
+):
+    """Test that async_setup_entry raises ConfigEntryNotReady.
 
     When an unexpected exception occurs during coordinator update.
     """
@@ -132,18 +135,19 @@ async def test_setup_entry_unexpected_exception(hass, dummy_config_entry):
     entry = dummy_config_entry(data)
 
     # Patch async_get_thing_info to raise a generic exception.
-    with patch(
-        "custom_components.daikin_br.async_get_thing_info",
-        new=AsyncMock(side_effect=Exception("Unexpected test error")),
+    with (
+        patch(
+            "custom_components.daikin_br.async_get_thing_info",
+            new=AsyncMock(side_effect=Exception("Unexpected test error")),
+        ),
+        pytest.raises(ConfigEntryNotReady),
     ):
-        with pytest.raises(ConfigEntryNotReady):
-            await async_setup_entry(hass, entry)
+        await async_setup_entry(hass, entry)
 
 
 @pytest.mark.asyncio
-async def test_async_setup_entry_success(hass, dummy_config_entry):
-    """
-    Test async_setup_entry initializes the coordinator correctly.
+async def test_async_setup_entry_success(hass: HomeAssistant, dummy_config_entry):
+    """Test async_setup_entry initializes the coordinator correctly.
 
     Performs a refresh, stores runtime_data, and forwards platform setup.
     """
@@ -159,7 +163,7 @@ async def test_async_setup_entry_success(hass, dummy_config_entry):
     original_init = DataUpdateCoordinator.__init__
 
     # pylint: disable=duplicate-code
-    def dummy_init(self, hass, logger, **kwargs):
+    def dummy_init(self, hass: HomeAssistant, logger, **kwargs):
         """Override __init__ to accept extra args without breaking HA."""
         self.hass = hass
         self.logger = logger
@@ -171,17 +175,20 @@ async def test_async_setup_entry_success(hass, dummy_config_entry):
     DataUpdateCoordinator.__init__ = dummy_init
 
     try:
-        with patch(
-            "custom_components.daikin_br.async_get_thing_info",
-            new=AsyncMock(return_value={"port1": {"fw_ver": "1.0.0"}}),
-        ) as mock_get_info, patch.object(
-            DaikinDataUpdateCoordinator,
-            "async_config_entry_first_refresh",
-            new=AsyncMock(),
-        ) as mock_refresh, patch.object(
-            hass.config_entries, "async_forward_entry_setups", new=AsyncMock()
-        ) as mock_forward:
-
+        with (
+            patch(
+                "custom_components.daikin_br.async_get_thing_info",
+                new=AsyncMock(return_value={"port1": {"fw_ver": "1.0.0"}}),
+            ) as mock_get_info,
+            patch.object(
+                DaikinDataUpdateCoordinator,
+                "async_config_entry_first_refresh",
+                new=AsyncMock(),
+            ) as mock_refresh,
+            patch.object(
+                hass.config_entries, "async_forward_entry_setups", new=AsyncMock()
+            ) as mock_forward,
+        ):
             result = await async_setup_entry(hass, entry)
 
     finally:
@@ -198,7 +205,7 @@ async def test_async_setup_entry_success(hass, dummy_config_entry):
 
 
 @pytest.mark.asyncio
-async def test_async_unload_entry(hass):
+async def test_async_unload_entry(hass: HomeAssistant):
     """Test that async_unload_entry unloads the config entry correctly."""
     entry = MockConfigEntry(
         domain=DOMAIN, data={"key": "value"}, unique_id="test_entry"
@@ -217,8 +224,7 @@ async def test_async_unload_entry(hass):
 
 @pytest.mark.asyncio
 async def test_remove_config_entry_device_runtime_data_none():
-    """
-    Test that async_remove_config_entry_device returns True when runtime_data.
+    """Test that async_remove_config_entry_device returns True when runtime_data.
 
     Data is None.
     """

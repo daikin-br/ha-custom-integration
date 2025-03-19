@@ -3,16 +3,16 @@
         "abort": {
             "already_configured": "Device is already configured",
             "cannot_connect": "Failed to connect",
+            "device_ip_updated": "The device IP changed, configuration updated",
             "reconfigure_successful": "Re-configuration was successful",
-            "unique_id_mismatched": "The device's unique ID does not match the expected value",
-            "device_ip_updated": "The device IP changed, configuration updated"
+            "unique_id_mismatched": "The device's unique ID does not match the expected value"
         },
         "error": {
-            "unknown": "Unexpected error",
-            "invalid_auth": "Invalid authentication",
             "cannot_connect": "Failed to connect",
+            "invalid_auth": "Invalid authentication",
             "invalid_key": "Invalid API key",
-            "unique_id_mismatched": "The device's unique ID does not match the expected value"
+            "unique_id_mismatched": "The device's unique ID does not match the expected value",
+            "unknown": "Unexpected error"
         },
         "flow_title": "Discovered Device: {name}",
         "step": {

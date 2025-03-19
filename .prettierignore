@@ -1,0 +1,11 @@
+*.md
+.strict-typing
+homeassistant/components/*/translations/*.json
+homeassistant/generated/*
+tests/components/lidarr/fixtures/initialize.js
+tests/components/lidarr/fixtures/initialize-wrong.js
+tests/fixtures/core/config/yaml_errors/
+custom_components/daikin_br/translations/pt-BR.json
+custom_components/daikin_br/translations/en.json
+.github/workflows/hacsaction.yaml
+.github/workflows/hassfest.yaml

@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from typing_extensions import TypeAlias
 
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+type DaikinConfigEntry = ConfigEntry[DaikinDataUpdateCoordinator]
 
 
 # pylint: disable=too-many-arguments, too-many-positional-arguments
@@ -47,16 +47,24 @@ class DaikinDataUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.debug(
                     "Unable to retrieve device status data for %s", self.device_apn
                 )
-                raise TypeError("Failed to retrieve device data")
-            return data
+                _raise_device_data_failure(self.device_apn)
         except Exception as e:
             _LOGGER.debug("Error fetching data for %s: %s", self.device_apn, e)
             raise UpdateFailed(
                 f"The device {self.device_apn} is unavailable: {e}"
             ) from e
+        else:
+            return data
 
 
-if TYPE_CHECKING:
-    DaikinConfigEntry: TypeAlias = ConfigEntry[DaikinDataUpdateCoordinator]
-else:
-    DaikinConfigEntry = ConfigEntry
+def _raise_device_data_failure(device_apn: str) -> None:
+    """Raise a TypeError to indicate that device data retrieval has failed.
+
+    Args:
+        device_apn (str): The device APN for which data retrieval failed.
+
+    Raises:
+        TypeError: Always raised to indicate that the device data could not be retrieved.
+
+    """
+    raise TypeError("Failed to retrieve device data")
