@@ -19,8 +19,11 @@ Esta integração do Home Assistant suporta a versão brasileira dos produtos Da
 3. Na interface do HA:
    - Vá em "Configurações" -> "Dispositivos & Serviços" -> "Integrações", clique em "+" e procure por "**Daikin Smart AC**"
 4. Se "**Daikin Smart AC**" não estiver disponível, adicione-o manualmente conforme mostrado abaixo:
+   - Repository: https://github.com/daikin-br/ha-custom-integration
+   - Type: Integration
 
 ![Add Repository](images/ha-custom-repo-setup-1.png "Add Repository")
+
 ![Add Repository](images/ha-custom-repo-setup-2.png "Add Repository")
 
 ## Configuração
@@ -38,6 +41,17 @@ Se não for detectado automaticamente, você pode configurar a integração manu
 - No canto inferior direito, selecione o botão Adicionar Integração.
 - Na lista, selecione Daikin Smart AC.
 - Siga as instruções na tela para concluir a configuração.
+
+> ### Variáveis de Configuração
+>
+> **Endereço IP do Dispositivo (Opcional):**
+> descrição: "O endereço IP do seu dispositivo Daikin Smart AC. Isso só é necessário quando a descoberta automática do dispositivo não funciona."
+>
+> **Nome do Dispositivo (Obrigatório):**
+> descrição: "O nome do seu dispositivo Daikin Smart AC."
+>
+> **Chave do Dispositivo (Obrigatório):**
+> descrição: "A chave da API do seu dispositivo Daikin Smart AC. Para obter essa chave, abra o aplicativo móvel Daikin Smart AC, navegue até **Menu -> Integrações -> Home Assistant**, insira ou selecione o SSID e pressione **Enviar**."
 
 ### Nota:
 
