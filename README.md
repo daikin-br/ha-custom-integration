@@ -17,16 +17,24 @@ This Home Assistant integration supports the Brazilian version of Daikin Smart A
 ## Installation
 
 1. Download it with HACS
-2. Restart Home Assistant
-3. In the HA UI:
-   - Go to "Settings" -> "Devices & Services" -> "Integrations", click "+" and search for "**Daikin Smart AC**"
-4. If "**Daikin Smart AC**" is not available then ADD it manually as shown below:
+
+   - If **HACS is not installed**, follow this URL to install and set it up:
+     [https://www.hacs.xyz/docs/use/download/download/](https://www.hacs.xyz/docs/use/download/download/).
+
+2. Click on HACS and search for "**Daikin Smart AC**". If is not available then **ADD it manually** as shown below:
+
    - Repository: https://github.com/daikin-br/ha-custom-integration
+
    - Type: Integration
 
 ![Add Repository](images/ha-custom-repo-setup-1.png "Add Repository")
 
 ![Add Repository](images/ha-custom-repo-setup-2.png "Add Repository")
+
+3. Restart Home Assistant
+
+4. In the HA UI:
+   - Go to "Settings" -> "Devices & Services" -> "Integrations", click "+" and search for "**Daikin Smart AC**"
 
 ## Configuration
 
@@ -141,3 +149,5 @@ This integration follows standard integration removal. No extra steps are requir
 If you want to contribute to this please read the [Contribution guidelines](CONTRIBUTING.md)
 
 ---
+
+[def]: https://www.hacs.xyz/docs/use/download/download/
