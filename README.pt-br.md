@@ -80,6 +80,7 @@ A plataforma de climatização `daikin_br` integra os sistemas de ar-condicionad
 
 - [**Modo HVAC**](https://www.home-assistant.io/integrations/climate/#action-climateset_hvac_mode) (`off`, `heat`, `cool`, `dry`, `fan_only`)
 - [**Temperatura Alvo**](https://www.home-assistant.io/integrations/climate#action-climateset_temperature)
+- [**Ligar/Desligar**](https://www.home-assistant.io/integrations/climate#action-climateturn_on)
 - [**Modo Ventilador**](https://www.home-assistant.io/integrations/climate#action-climateset_fan_mode) (velocidade do ventilador)
 - [**Modo Oscilação**](https://www.home-assistant.io/integrations/climate#action-climateset_swing_mode)
 - [**Modo Predefinido**](https://www.home-assistant.io/integrations/climate#action-climateset_preset_mode) (eco, boost)

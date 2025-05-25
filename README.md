@@ -85,6 +85,8 @@ The `daikin_br` climate platform integrates Daikin air conditioning systems with
 
 - [**Target Temperature**](https://www.home-assistant.io/integrations/climate#action-climateset_temperature)
 
+- [**Turn On/Off**](https://www.home-assistant.io/integrations/climate#action-climateturn_on)
+
 - [**Fan Mode**](https://www.home-assistant.io/integrations/climate#action-climateset_fan_mode) (fan speed)
 
 - [**Swing Mode**](https://www.home-assistant.io/integrations/climate#action-climateset_swing_mode)
