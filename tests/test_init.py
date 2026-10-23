@@ -3,6 +3,13 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant.const import CONF_API_KEY
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+
+# from tests.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.daikin_br import (
     PLATFORMS,
@@ -15,12 +22,6 @@ from custom_components.daikin_br.coordinator import (
     DaikinDataUpdateCoordinator,
     UpdateFailed,
 )
-from homeassistant.const import CONF_API_KEY
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-
-from tests.common import MockConfigEntry
 
 
 # pylint: disable=redefined-outer-name, too-few-public-methods

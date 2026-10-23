@@ -305,7 +305,15 @@ async def test_discovered_flow_device_name_not_provided(
     }
 
     # Patch only the methods that validate inputs.
-    with patch.object(config_flow, "_is_valid_base64", return_value=True):
+    # Resolved Home Assistant test teardown errors
+    # with patch.object(config_flow, "_is_valid_base64", return_value=True):
+    with (
+        patch.object(config_flow, "_is_valid_base64", return_value=True),
+        patch(
+            "custom_components.daikin_br.config_flow.async_get_thing_info",
+            new=AsyncMock(return_value=False),
+        ),
+    ):
         # Call the user step with invalid input
         result = await config_flow.async_step_user(user_input)
 
@@ -433,16 +441,30 @@ async def test_discovered_flow_decryption_fails(
 
     # Patch methods: `_is_valid_base64` returns True,
     # but `async_add_executor_job` simulates decryption failure.
+    # with (
+    #     patch.object(config_flow, "_is_valid_base64", return_value=True),
+    #     patch.object(
+    #         config_flow.hass,
+    #         "async_add_executor_job",
+    #         new=AsyncMock(return_value=False),
+    #     ),
+    # ):  # Fix: Use AsyncMock
     with (
         patch.object(config_flow, "_is_valid_base64", return_value=True),
-        patch.object(
-            config_flow.hass,
-            "async_add_executor_job",
+        patch(
+            "custom_components.daikin_br.config_flow.async_get_thing_info",
             new=AsyncMock(return_value=False),
-        ),
-    ):  # Fix: Use AsyncMock
+        ) as mock_get_info,
+    ):
         # Call the user step with an API key that fails decryption
         result = await config_flow.async_step_user(user_input)
+
+        # Verify that device validation was attempted.
+        mock_get_info.assert_awaited_once_with(
+            disc["host"],
+            user_input[CONF_API_KEY],
+            "acstatus",
+        )
 
         # Ensure that the returned result is a form (indicating error)
         assert result["type"] == FlowResultType.FORM
@@ -581,7 +603,14 @@ async def test_manual_flow_device_name_not_provided(config_flow) -> None:
     user_input = {"device_ip": "192.168.1.100", CONF_API_KEY: "VALIDBASE64KEY=="}
 
     # Mock the necessary async function and methods
-    with patch.object(config_flow, "_is_valid_base64", return_value=True):
+    # with patch.object(config_flow, "_is_valid_base64", return_value=True):
+    with (
+        patch.object(config_flow, "_is_valid_base64", return_value=True),
+        patch(
+            "custom_components.daikin_br.config_flow.async_get_thing_info",
+            new=AsyncMock(return_value=False),
+        ),
+    ):
         # Call the async_step_manual function
         result = await config_flow.async_step_manual(user_input)
 
