@@ -81,9 +81,9 @@ If this applies to your setup, adjust your firewall settings to allow access to 
 
 The `daikin_br` climate platform integrates Daikin air conditioning systems with Home Assistant, allowing control over the following parameters:
 
-- [**HVAC Mode**](https://www.home-assistant.io/integrations/climate/#action-climateset_hvac_mode) (`off`, `heat`, `cool`, `dry`, `fan_only`)
+- [**HVAC Mode**](https://www.home-assistant.io/integrations/climate/#action-climateset_hvac_mode) (`off`, `heat`, `cool`, `dry`, `fan_only`, `auto`). `heat` is hidden on cooling-only units.
 
-- [**Target Temperature**](https://www.home-assistant.io/integrations/climate#action-climateset_temperature)
+- [**Target Temperature**](https://www.home-assistant.io/integrations/climate#action-climateset_temperature). The range follows the current mode: 18-32°C in `cool`, 10-30°C in `heat` and 18-30°C in `auto`.
 
 - [**Turn On/Off**](https://www.home-assistant.io/integrations/climate#action-climateturn_on)
 
@@ -91,9 +91,24 @@ The `daikin_br` climate platform integrates Daikin air conditioning systems with
 
 - [**Swing Mode**](https://www.home-assistant.io/integrations/climate#action-climateset_swing_mode)
 
-- [**Preset Mode**](https://www.home-assistant.io/integrations/climate#action-climateset_preset_mode) (eco, boost)
+- [**Preset Mode**](https://www.home-assistant.io/integrations/climate#action-climateset_preset_mode) (`none`, `eco` = Econo, `boost` = Power Chill)
 
 The Current ambient temperature is also displayed.
+
+## Switch
+
+The `daikin_br` switch platform exposes the following device features:
+
+- **Power**: turns the AC on or off.
+- **Power Chill**: turning it on turns Econo off. Requires the AC to be on.
+- **Econo**: turning it on turns Power Chill off. Requires the AC to be on.
+- **Vertical swing**: only created when the device reports vertical swing support.
+- **Streamer**
+- **Good Sleep**: requires the AC to be on.
+
+## Select
+
+The `daikin_br` select platform provides a **Fan speed** entity with the options `Auto`, `Quiet` and `1` to `5`. The fan speed cannot be changed in `dry` mode or while Power Chill is on.
 
 ## Data updates
 

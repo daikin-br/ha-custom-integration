@@ -78,14 +78,29 @@ Se isso se aplicar à sua configuração, ajuste as configurações do seu firew
 
 A plataforma de climatização `daikin_br` integra os sistemas de ar-condicionado Daikin com o Home Assistant, permitindo o controle dos seguintes parâmetros:
 
-- [**Modo HVAC**](https://www.home-assistant.io/integrations/climate/#action-climateset_hvac_mode) (`off`, `heat`, `cool`, `dry`, `fan_only`)
-- [**Temperatura Alvo**](https://www.home-assistant.io/integrations/climate#action-climateset_temperature)
+- [**Modo HVAC**](https://www.home-assistant.io/integrations/climate/#action-climateset_hvac_mode) (`off`, `heat`, `cool`, `dry`, `fan_only`, `auto`). O modo `heat` fica oculto em aparelhos somente frio.
+- [**Temperatura Alvo**](https://www.home-assistant.io/integrations/climate#action-climateset_temperature). A faixa acompanha o modo atual: 18-32°C em `cool`, 10-30°C em `heat` e 18-30°C em `auto`.
 - [**Ligar/Desligar**](https://www.home-assistant.io/integrations/climate#action-climateturn_on)
 - [**Modo Ventilador**](https://www.home-assistant.io/integrations/climate#action-climateset_fan_mode) (velocidade do ventilador)
 - [**Modo Oscilação**](https://www.home-assistant.io/integrations/climate#action-climateset_swing_mode)
-- [**Modo Predefinido**](https://www.home-assistant.io/integrations/climate#action-climateset_preset_mode) (eco, boost)
+- [**Modo Predefinido**](https://www.home-assistant.io/integrations/climate#action-climateset_preset_mode) (`none`, `eco` = Econo, `boost` = Power Chill)
 
 A temperatura ambiente atual também é exibida.
+
+## Interruptores
+
+A plataforma de interruptores (`switch`) `daikin_br` expõe os seguintes recursos do aparelho:
+
+- **Ligado**: liga ou desliga o ar-condicionado.
+- **Modo potente** (Power Chill): ao ser ligado, desliga o Modo econômico. Exige o ar-condicionado ligado.
+- **Modo econômico** (Econo): ao ser ligado, desliga o Modo potente. Exige o ar-condicionado ligado.
+- **Oscilação vertical**: criado apenas quando o aparelho informa suporte à oscilação vertical.
+- **Streamer**
+- **Sono** (Good Sleep): exige o ar-condicionado ligado.
+
+## Seleção
+
+A plataforma de seleção (`select`) `daikin_br` fornece a entidade **Velocidade** do ventilador, com as opções `Automática`, `Silenciosa` e `1` a `5`. A velocidade não pode ser alterada no modo `dry` nem com o Modo potente ligado.
 
 ## Atualizações de Dados
 
