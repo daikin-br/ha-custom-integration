@@ -49,18 +49,57 @@
         "state_attributes": {
           "fan_mode": {
             "state": {
-              "medium_high": "Medium High",
+              "auto": "Auto",
+              "quiet": "Quiet",
+              "low": "Low",
               "low_medium": "Low Medium",
-              "quiet": "Quiet"
+              "medium": "Medium",
+              "medium_high": "Medium High",
+              "high": "High"
             }
           },
           "preset_mode": {
             "state": {
+              "none": "None",
               "eco": "Econo",
               "boost": "Power Chill"
             }
           }
         }
+      }
+    },
+    "select": {
+      "fan_speed": {
+        "name": "Fan speed",
+        "state": {
+          "auto": "Auto",
+          "quiet": "Quiet",
+          "speed_1": "1",
+          "speed_2": "2",
+          "speed_3": "3",
+          "speed_4": "4",
+          "speed_5": "5"
+        }
+      }
+    },
+    "switch": {
+      "power": {
+        "name": "Power"
+      },
+      "powerchill": {
+        "name": "Power Chill"
+      },
+      "econo": {
+        "name": "Econo"
+      },
+      "v_swing": {
+        "name": "Vertical swing"
+      },
+      "streamer": {
+        "name": "Streamer"
+      },
+      "good_sleep": {
+        "name": "Good Sleep"
       }
     }
   }

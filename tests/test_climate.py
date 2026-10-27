@@ -343,8 +343,9 @@ async def test_async_set_preset_mode(
     # Simulate device is ON by setting the internal _power_state.
     monkeypatch.setattr(climate_entity, "_power_state", 1)
 
+    # Only the fields that change are sent, starting from PRESET_NONE.
     # Test preset ECO.
-    expected_json_eco = json.dumps({"port1": {"powerchill": 0, "econo": 1}})
+    expected_json_eco = json.dumps({"port1": {"econo": 1}})
     await climate_entity.async_set_preset_mode(PRESET_ECO)
     # Use the public property to verify the preset mode.
     assert climate_entity.preset_mode == PRESET_ECO
@@ -363,11 +364,19 @@ async def test_async_set_preset_mode(
     climate_entity.set_thing_state.reset_mock()
 
     # Test preset NONE.
-    expected_json_none = json.dumps({"port1": {"powerchill": 0, "econo": 0}})
+    expected_json_none = json.dumps({"port1": {"powerchill": 0}})
     await climate_entity.async_set_preset_mode(PRESET_NONE)
     assert climate_entity.preset_mode == PRESET_NONE
     climate_entity.schedule_update_ha_state.assert_called_once()
     climate_entity.set_thing_state.assert_awaited_once_with(expected_json_none)
+    climate_entity.schedule_update_ha_state.reset_mock()
+    climate_entity.set_thing_state.reset_mock()
+
+    # Re-selecting the current preset sends econo only, never powerchill.
+    await climate_entity.async_set_preset_mode(PRESET_NONE)
+    climate_entity.set_thing_state.assert_awaited_once_with(
+        json.dumps({"port1": {"econo": 0}})
+    )
     climate_entity.schedule_update_ha_state.reset_mock()
     climate_entity.set_thing_state.reset_mock()
 
@@ -1159,3 +1168,36 @@ async def test_async_turn_on_and_off(hass: HomeAssistant, mock_config_entry) -> 
     await climate_entity.async_turn_off()
     expected_off = json.dumps(prepare_device_payload(power=0))
     climate_entity.set_thing_state.assert_awaited_once_with(expected_off)
+
+
+def test_hvac_modes_follow_capabilities(mock_config_entry) -> None:
+    """Heat mode is hidden on units whose capabilities report heat=0."""
+    climate_entity = DaikinClimate(mock_config_entry)
+
+    mock_config_entry.runtime_data.capabilities = {}
+    assert HVACMode.HEAT in climate_entity.hvac_modes
+
+    mock_config_entry.runtime_data.capabilities = {"heat": 0, "v_sw": 1}
+    assert HVACMode.HEAT not in climate_entity.hvac_modes
+    assert HVACMode.COOL in climate_entity.hvac_modes
+
+
+def test_temperature_range_follows_mode(
+    monkeypatch: pytest.MonkeyPatch, mock_config_entry
+) -> None:
+    """The dial limits match what the device accepts in each mode."""
+    climate_entity = DaikinClimate(mock_config_entry)
+
+    expected = {
+        HVACMode.COOL: (18.0, 32.0),
+        HVACMode.HEAT: (10.0, 30.0),
+        HVACMode.AUTO: (18.0, 30.0),
+    }
+    for mode, limits in expected.items():
+        monkeypatch.setattr(climate_entity, "_hvac_mode", mode)
+        assert (climate_entity.min_temp, climate_entity.max_temp) == limits
+
+    # Without a target temperature, a cooling-only unit never goes below 18°C.
+    monkeypatch.setattr(climate_entity, "_hvac_mode", HVACMode.FAN_ONLY)
+    mock_config_entry.runtime_data.capabilities = {"heat": 0}
+    assert (climate_entity.min_temp, climate_entity.max_temp) == (18.0, 32.0)

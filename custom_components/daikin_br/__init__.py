@@ -15,7 +15,7 @@ from homeassistant.helpers.device_registry import DeviceEntry
 from .const import DOMAIN, POLL_INTERVAL
 from .coordinator import DaikinConfigEntry, DaikinDataUpdateCoordinator, UpdateFailed
 
-PLATFORMS = [Platform.CLIMATE]
+PLATFORMS = [Platform.CLIMATE, Platform.SELECT, Platform.SWITCH]
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,6 +72,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: DaikinConfigEntry) -> bo
     )
 
     await coordinator.async_config_entry_first_refresh()
+
+    # Capability flags are optional: older firmware may not answer, so default to all features.
+    capabilities = await async_get_thing_info(ip_address, device_key, "device")
+    coordinator.capabilities = capabilities if isinstance(capabilities, dict) else {}
 
     # Store the coordinator in runtime_data.
     entry.runtime_data = coordinator

@@ -16,6 +16,31 @@
           }
         }
       }
+    },
+    "select": {
+      "fan_speed": {
+        "default": "mdi:fan"
+      }
+    },
+    "switch": {
+      "power": {
+        "default": "mdi:power"
+      },
+      "powerchill": {
+        "default": "mdi:rocket-launch"
+      },
+      "econo": {
+        "default": "mdi:leaf"
+      },
+      "v_swing": {
+        "default": "mdi:arrow-up-down"
+      },
+      "streamer": {
+        "default": "mdi:creation"
+      },
+      "good_sleep": {
+        "default": "mdi:sleep"
+      }
     }
   }
 }
