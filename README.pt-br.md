@@ -82,7 +82,7 @@ A plataforma de climatização `daikin_br` integra os sistemas de ar-condicionad
 - [**Temperatura Alvo**](https://www.home-assistant.io/integrations/climate#action-climateset_temperature)
 - [**Ligar/Desligar**](https://www.home-assistant.io/integrations/climate#action-climateturn_on)
 - [**Modo Ventilador**](https://www.home-assistant.io/integrations/climate#action-climateset_fan_mode) (velocidade do ventilador)
-- [**Modo Oscilação**](https://www.home-assistant.io/integrations/climate#action-climateset_swing_mode)
+- [**Modo Oscilação**](https://www.home-assistant.io/integrations/climate#action-climateset_swing_mode) (`off`, `vertical`, `coanda`; `coanda` só aparece nos dispositivos que suportam essa função)
 - [**Modo Predefinido**](https://www.home-assistant.io/integrations/climate#action-climateset_preset_mode) (eco, boost)
 
 A temperatura ambiente atual também é exibida.
@@ -91,10 +91,6 @@ A temperatura ambiente atual também é exibida.
 
 A integração obtém dados do dispositivo a cada 10 segundos, por padrão.
 Recomenda-se não reduzir o tempo de consulta para menos de 10 segundos. Para os usuários que desejam definir seu próprio intervalo de consulta personalizado, eles podem [configurar um intervalo de consulta personalizado](https://www.home-assistant.io/common-tasks/general/#defining-a-custom-polling-interval).
-
-## Limitações conhecidas
-
-O modo predefinido `Coanda` não é suportado no momento.
 
 ## Solução de Problemas
 

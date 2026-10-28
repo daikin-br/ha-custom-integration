@@ -59,6 +59,11 @@
                             "boost": "Power Chill",
                             "eco": "Econo"
                         }
+                    },
+                    "swing_mode": {
+                        "state": {
+                            "coanda": "Coanda"
+                        }
                     }
                 }
             }

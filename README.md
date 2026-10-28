@@ -89,7 +89,7 @@ The `daikin_br` climate platform integrates Daikin air conditioning systems with
 
 - [**Fan Mode**](https://www.home-assistant.io/integrations/climate#action-climateset_fan_mode) (fan speed)
 
-- [**Swing Mode**](https://www.home-assistant.io/integrations/climate#action-climateset_swing_mode)
+- [**Swing Mode**](https://www.home-assistant.io/integrations/climate#action-climateset_swing_mode) (`off`, `vertical`, `coanda`; `coanda` is only offered on devices that support it)
 
 - [**Preset Mode**](https://www.home-assistant.io/integrations/climate#action-climateset_preset_mode) (eco, boost)
 
@@ -99,10 +99,6 @@ The Current ambient temperature is also displayed.
 
 The integration fetches data from the device every 10 seconds by default.
 It is recommended not to reduce the polling time below 10 seconds. For users who want to set their own custom polling interval, they can [configure a custom polling interval](https://www.home-assistant.io/common-tasks/general/#defining-a-custom-polling-interval).
-
-## Known limitations
-
-Preset mode `Coanda` is currently not supported.
 
 ## Troubleshooting
 

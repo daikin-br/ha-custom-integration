@@ -12,7 +12,12 @@ from pyiotdevice import (
 )
 import pytest
 
-from custom_components.daikin_br.climate import DaikinClimate, async_setup_entry
+from custom_components.daikin_br.climate import (
+    SWING_COANDA,
+    DaikinClimate,
+    async_setup_entry,
+    map_swing_mode,
+)
 from custom_components.daikin_br.const import DOMAIN
 from homeassistant.components.climate import (
     PRESET_BOOST,
@@ -1159,3 +1164,61 @@ async def test_async_turn_on_and_off(hass: HomeAssistant, mock_config_entry) -> 
     await climate_entity.async_turn_off()
     expected_off = json.dumps(prepare_device_payload(power=0))
     climate_entity.set_thing_state.assert_awaited_once_with(expected_off)
+
+
+def test_swing_modes_without_coanda(mock_config_entry) -> None:
+    """Test that Coanda is not offered when the device does not report it."""
+    climate_entity = DaikinClimate(mock_config_entry)
+    assert climate_entity.swing_modes == [SWING_OFF, SWING_VERTICAL]
+
+
+def test_swing_modes_with_coanda(mock_config_entry, dummy_coordinator) -> None:
+    """Test that Coanda is offered when the device reports it."""
+    dummy_coordinator.data = {"port1": {"fw_ver": "1.0.0", "coanda": 0}}
+    climate_entity = DaikinClimate(mock_config_entry)
+    assert climate_entity.swing_modes == [SWING_OFF, SWING_VERTICAL, SWING_COANDA]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("swing_mode", "expected_payload"),
+    [
+        (SWING_OFF, {"v_swing": 0, "coanda": 0}),
+        (SWING_VERTICAL, {"v_swing": 1, "coanda": 0}),
+        (SWING_COANDA, {"v_swing": 0, "coanda": 1}),
+    ],
+)
+async def test_async_set_swing_mode_with_coanda(
+    hass: HomeAssistant,
+    mock_config_entry,
+    dummy_coordinator,
+    swing_mode,
+    expected_payload,
+) -> None:
+    """Test that swing modes set both v_swing and coanda on supported devices."""
+    dummy_coordinator.data = {"port1": {"fw_ver": "1.0.0", "coanda": 0}}
+    climate_entity = DaikinClimate(mock_config_entry)
+    climate_entity.hass = hass
+    climate_entity.entity_id = "climate.test_device"
+    climate_entity.set_thing_state = AsyncMock()
+
+    await climate_entity.async_set_swing_mode(swing_mode)
+
+    climate_entity.set_thing_state.assert_awaited_once_with(
+        json.dumps({"port1": expected_payload})
+    )
+
+
+@pytest.mark.parametrize(
+    ("port_status", "expected_swing_mode"),
+    [
+        ({}, SWING_OFF),
+        ({"v_swing": 0, "coanda": 0}, SWING_OFF),
+        ({"v_swing": 1}, SWING_VERTICAL),
+        ({"v_swing": 1, "coanda": 0}, SWING_VERTICAL),
+        ({"v_swing": 0, "coanda": 1}, SWING_COANDA),
+    ],
+)
+def test_map_swing_mode(port_status, expected_swing_mode) -> None:
+    """Test mapping the device status to a swing mode."""
+    assert map_swing_mode(port_status) == expected_swing_mode

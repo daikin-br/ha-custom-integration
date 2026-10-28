@@ -13,6 +13,11 @@
               "low": "mdi:fan",
               "quiet": "mdi:fan-minus"
             }
+          },
+          "swing_mode": {
+            "state": {
+              "coanda": "mdi:arrow-up-bold-box-outline"
+            }
           }
         }
       }
