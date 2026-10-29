@@ -1,16 +1,19 @@
 """Tests for the Daikin Climate custom component."""
 
+from datetime import timedelta
 import json
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from pyiotdevice import (
+    CommunicationErrorException,
     InvalidDataException,
     map_fan_speed,
     map_hvac_mode,
     prepare_device_payload,
 )
 import pytest
+from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.daikin_br.climate import (
     SWING_COANDA,
@@ -18,7 +21,8 @@ from custom_components.daikin_br.climate import (
     async_setup_entry,
     map_swing_mode,
 )
-from custom_components.daikin_br.const import DOMAIN
+from custom_components.daikin_br.const import DOMAIN, POLL_INTERVAL
+from custom_components.daikin_br.coordinator import DaikinDataUpdateCoordinator
 from homeassistant.components.climate import (
     PRESET_BOOST,
     PRESET_ECO,
@@ -30,6 +34,7 @@ from homeassistant.components.climate import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 
 # pylint: disable=redefined-outer-name, too-few-public-methods
@@ -65,6 +70,32 @@ def mock_config_entry(dummy_coordinator):
     entry.runtime_data = dummy_coordinator  # Set runtime_data for access in tests
 
     return entry
+
+
+@pytest.fixture
+async def coordinator_climate(hass: HomeAssistant, mock_config_entry, request):
+    """Use the real coordinator with the Climate update listener registered."""
+    coordinator = DaikinDataUpdateCoordinator(
+        hass,
+        None,
+        device_apn="TEST_APN",
+        update_method=AsyncMock(),
+        update_interval=timedelta(seconds=POLL_INTERVAL),
+    )
+    coordinator.data = {"port1": {"fw_ver": "1.0.0", "power": 0}}
+    if getattr(request, "param", False):
+        coordinator.data["port1"]["coanda"] = 0
+    mock_config_entry.runtime_data = coordinator
+    entity = DaikinClimate(mock_config_entry)
+    entity.hass = hass
+    entity.entity_id = "climate.test_device"
+    entity.async_write_ha_state = MagicMock()
+    remove_listener = coordinator.async_add_listener(entity._handle_coordinator_update)
+    try:
+        yield entity
+    finally:
+        remove_listener()
+        await coordinator.async_shutdown()
 
 
 @pytest.mark.asyncio
@@ -432,13 +463,10 @@ async def test_async_set_swing_mode(
 
 
 @pytest.mark.asyncio
-async def test_set_thing_state_success(hass: HomeAssistant, mock_config_entry) -> None:
+async def test_set_thing_state_success(hass: HomeAssistant, coordinator_climate) -> None:
     """Test that set_thing_state updates the entity state as expected."""
-    # Use the config entry fixture that already has runtime_data set.
-    entry = mock_config_entry
-
-    # Instantiate the DaikinClimate entity using the full config entry.
-    climate_entity = DaikinClimate(entry)
+    # The fixture registers the Climate listener on a real coordinator.
+    climate_entity = coordinator_climate
     climate_entity.hass = hass
     climate_entity.entity_id = "climate.test_device"
 
@@ -494,8 +522,10 @@ async def test_set_thing_state_success(hass: HomeAssistant, mock_config_entry) -
         f"Expected preset_mode '{PRESET_ECO}', got {climate_entity.preset_mode}"
     )
 
-    # Verify that async_write_ha_state was called once.
-    climate_entity.async_write_ha_state.assert_called_once()
+    assert climate_entity.coordinator.data is mock_response
+    climate_entity.coordinator._update_method.assert_not_awaited()
+    # Both existing mapping and callback writes are preserved in this change.
+    assert climate_entity.async_write_ha_state.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -794,11 +824,10 @@ def test_device_info(mock_config_entry) -> None:
 
 @pytest.mark.asyncio
 async def test_set_thing_state_exception(
-    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, mock_config_entry
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, coordinator_climate
 ) -> None:
     """Test that set_thing_state logs an error when async_send_operation_data fails."""
-    # Create the DaikinClimate entity using the config entry fixture.
-    entity = DaikinClimate(mock_config_entry)
+    entity = coordinator_climate
     entity.hass = hass
     entity.entity_id = "climate.test_device"
 
@@ -953,15 +982,14 @@ async def test_async_set_temperature_in_dry(
 
 @pytest.mark.asyncio
 async def test_set_thing_state_preset_boost_and_none(
-    hass: HomeAssistant, mock_config_entry
+    hass: HomeAssistant, coordinator_climate
 ) -> None:
     """Test that set_thing_state updates the preset mode correctly.
 
     First, when powerchill equals 1, the preset mode should be PRESET_BOOST.
     Then, when both econo and powerchill equal 0, the preset mode should be PRESET_NONE.
     """
-    # Create the DaikinClimate entity using the config entry fixture.
-    climate_entity = DaikinClimate(mock_config_entry)
+    climate_entity = coordinator_climate
     climate_entity.hass = hass
     climate_entity.entity_id = "climate.test_device"
 
@@ -1015,14 +1043,13 @@ async def test_set_thing_state_preset_boost_and_none(
 
 @pytest.mark.asyncio
 async def test_set_thing_state_preset_boost(
-    hass: HomeAssistant, mock_config_entry
+    hass: HomeAssistant, coordinator_climate
 ) -> None:
     """Test that set_thing_state updates the preset mode to PRESET_BOOST.
 
     When the response indicates that powerchill equals 1.
     """
-    # Create the DaikinClimate entity using the config entry fixture.
-    climate_entity = DaikinClimate(mock_config_entry)
+    climate_entity = coordinator_climate
     climate_entity.hass = hass
     climate_entity.entity_id = "climate.test_device"
     # Patch async_write_ha_state so that no real HA update is attempted.
@@ -1059,12 +1086,10 @@ async def test_set_thing_state_preset_boost(
 
 @pytest.mark.asyncio
 async def test_set_thing_state_invalid_data_exception(
-    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, mock_config_entry
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture, coordinator_climate
 ) -> None:
     """Test that set_thing_state logs an error when InvalidDataException is raised."""
-    # Create the DaikinClimate entity using the config entry fixture.
-    # The fixture 'mock_config_entry' already sets runtime_data.
-    entity = DaikinClimate(mock_config_entry)
+    entity = coordinator_climate
     entity.hass = hass
     entity.entity_id = "climate.test_device"
 
@@ -1222,3 +1247,249 @@ async def test_async_set_swing_mode_with_coanda(
 def test_map_swing_mode(port_status, expected_swing_mode) -> None:
     """Test mapping the device status to a swing mode."""
     assert map_swing_mode(port_status) == expected_swing_mode
+
+
+@pytest.mark.parametrize(
+    ("power", "mode", "expected_mode"),
+    [
+        (0, 0, HVACMode.OFF),
+        (0, 7, HVACMode.OFF),
+        (1, 0, HVACMode.AUTO),
+        (1, 7, HVACMode.AUTO),
+        (1, 1, HVACMode.AUTO),
+        (1, 3, HVACMode.COOL),
+        (1, 2, HVACMode.DRY),
+        (1, 6, HVACMode.FAN_ONLY),
+        (1, 4, HVACMode.HEAT),
+    ],
+)
+@pytest.mark.asyncio
+async def test_command_response_hvac_modes(
+    coordinator_climate, power, mode, expected_mode
+):
+    """Command responses reach the existing mapper, including Auto 0 and 7."""
+    response = {"port1": {"power": power, "mode": mode}}
+    with patch(
+        "custom_components.daikin_br.climate.async_send_operation_data",
+        new=AsyncMock(return_value=response),
+    ) as send_command, patch.object(
+        coordinator_climate.coordinator, "async_request_refresh", new=AsyncMock()
+    ) as request_refresh:
+        await coordinator_climate.set_thing_state('{"port1": {"power": 1}}')
+
+    send_command.assert_awaited_once_with(
+        coordinator_climate._ip_address,
+        coordinator_climate._device_key,
+        '{"port1": {"power": 1}}',
+        coordinator_climate._command_suffix,
+    )
+    assert coordinator_climate.coordinator.data is response
+    assert coordinator_climate.power_state == power
+    assert coordinator_climate.hvac_mode == expected_mode
+    request_refresh.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        None,
+        False,
+        [],
+        "invalid",
+        {},
+        {"port1": None},
+        {"port1": {}},
+        {"port1": []},
+        {"port1": [1]},
+        {"port1": "invalid"},
+        {"port1": 1},
+    ],
+)
+@pytest.mark.asyncio
+async def test_command_invalid_response_not_published(
+    coordinator_climate, caplog, response
+):
+    """Reject invalid envelopes without changing coordinator data or notifying."""
+    coordinator = coordinator_climate.coordinator
+    previous_data = coordinator.data
+    coordinator.last_update_success = False
+    with patch(
+        "custom_components.daikin_br.climate.async_send_operation_data",
+        new=AsyncMock(return_value=response),
+    ):
+        await coordinator_climate.set_thing_state('{"port1": {"power": 1}}')
+
+    assert coordinator.data is previous_data
+    assert coordinator.last_update_success is False
+    coordinator_climate.async_write_ha_state.assert_not_called()
+    assert "Error executing command TEST_APN:" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "error",
+    [CommunicationErrorException(), InvalidDataException(), RuntimeError("failed")],
+)
+@pytest.mark.asyncio
+async def test_command_error_not_published(coordinator_climate, error):
+    """Command failures leave the coordinator snapshot and listeners untouched."""
+    coordinator = coordinator_climate.coordinator
+    previous_data = coordinator.data
+    with patch(
+        "custom_components.daikin_br.climate.async_send_operation_data",
+        new=AsyncMock(side_effect=error),
+    ):
+        await coordinator_climate.set_thing_state('{"port1": {"power": 1}}')
+
+    assert coordinator.data is previous_data
+    coordinator_climate.async_write_ha_state.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_periodic_poll_after_command(hass: HomeAssistant, coordinator_climate):
+    """A command publication reschedules polling and the next poll updates Climate."""
+    coordinator = coordinator_climate.coordinator
+    command_response = {"port1": {"power": 1, "mode": 3, "temperature": 22}}
+    polled_status = {
+        "port1": {
+            "power": 1,
+            "mode": 7,
+            "temperature": 25,
+            "sensors": {"room_temp": 26},
+            "fan": 3,
+            "v_swing": 1,
+            "econo": 0,
+            "powerchill": 1,
+        }
+    }
+    coordinator._update_method.return_value = polled_status
+    with patch(
+        "custom_components.daikin_br.climate.async_send_operation_data",
+        new=AsyncMock(return_value=command_response),
+    ):
+        await coordinator_climate.set_thing_state('{"port1": {"temperature": 22}}')
+
+    assert coordinator_climate.target_temperature == 22
+    coordinator._update_method.assert_not_awaited()
+    coordinator_climate.async_write_ha_state.reset_mock()
+    async_fire_time_changed(
+        hass, dt_util.utcnow() + timedelta(seconds=POLL_INTERVAL + 1)
+    )
+    await hass.async_block_till_done()
+
+    coordinator._update_method.assert_awaited_once()
+    assert coordinator.data is polled_status
+    assert coordinator_climate.hvac_mode == HVACMode.AUTO
+    assert coordinator_climate.target_temperature == 25
+    assert coordinator_climate.current_temperature == 26
+    assert coordinator_climate.fan_mode == "low"
+    assert coordinator_climate.swing_mode == SWING_VERTICAL
+    assert coordinator_climate.preset_mode == PRESET_BOOST
+    assert coordinator_climate.async_write_ha_state.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_command_partial_response_uses_existing_defaults(coordinator_climate):
+    """Nonempty port1 responses intentionally use the polling mapper defaults."""
+    response = {"port1": {"power": 1}}
+    with patch(
+        "custom_components.daikin_br.climate.async_send_operation_data",
+        new=AsyncMock(return_value=response),
+    ):
+        await coordinator_climate.set_thing_state('{"port1": {"power": 1}}')
+
+    assert coordinator_climate.coordinator.data is response
+    assert coordinator_climate.hvac_mode == HVACMode.AUTO
+    assert coordinator_climate.target_temperature == 24
+    assert coordinator_climate.current_temperature is None
+    assert coordinator_climate.fan_mode == "auto"
+    assert coordinator_climate.swing_mode == SWING_OFF
+    assert coordinator_climate.preset_mode == PRESET_NONE
+
+
+@pytest.mark.asyncio
+async def test_command_conflicting_presets_use_polling_priority(coordinator_climate):
+    """Command responses now share the existing polling mapper's Eco priority."""
+    response = {"port1": {"power": 1, "mode": 3, "econo": 1, "powerchill": 1}}
+    with patch(
+        "custom_components.daikin_br.climate.async_send_operation_data",
+        new=AsyncMock(return_value=response),
+    ):
+        await coordinator_climate.set_thing_state('{"port1": {"power": 1}}')
+
+    assert coordinator_climate.preset_mode == PRESET_ECO
+
+
+@pytest.mark.parametrize(
+    ("coordinator_climate", "swing_mode", "expected_status"),
+    [
+        (True, SWING_COANDA, {"v_swing": 0, "coanda": 1}),
+        (True, SWING_VERTICAL, {"v_swing": 1, "coanda": 0}),
+        (True, SWING_OFF, {"v_swing": 0, "coanda": 0}),
+        (False, SWING_VERTICAL, {"v_swing": 1}),
+        (False, SWING_OFF, {"v_swing": 0}),
+    ],
+    indirect=["coordinator_climate"],
+)
+@pytest.mark.asyncio
+async def test_swing_command_coordinator_sync(
+    coordinator_climate, swing_mode, expected_status
+):
+    """Swing commands publish their responses through the registered listener."""
+    response = {"port1": {"power": 1, "mode": 3, **expected_status}}
+    with patch(
+        "custom_components.daikin_br.climate.async_send_operation_data",
+        new=AsyncMock(return_value=response),
+    ) as send_command:
+        await coordinator_climate.async_set_swing_mode(swing_mode)
+
+    send_command.assert_awaited_once_with(
+        coordinator_climate._ip_address,
+        coordinator_climate._device_key,
+        json.dumps({"port1": expected_status}),
+        coordinator_climate._command_suffix,
+    )
+    assert coordinator_climate.coordinator.data is response
+    assert coordinator_climate.swing_mode == swing_mode
+    assert coordinator_climate.async_write_ha_state.call_count == 2
+    coordinator_climate.coordinator._update_method.assert_not_awaited()
+
+
+@pytest.mark.parametrize("coordinator_climate", [True], indirect=True)
+@pytest.mark.parametrize(
+    ("swing_status", "expected_mode"),
+    [
+        ({"v_swing": 0, "coanda": 1}, SWING_COANDA),
+        ({"v_swing": 1, "coanda": 0}, SWING_VERTICAL),
+        ({"v_swing": 0, "coanda": 0}, SWING_OFF),
+        ({"v_swing": 1, "coanda": 1}, SWING_COANDA),
+    ],
+)
+@pytest.mark.asyncio
+async def test_periodic_poll_coanda_after_command(
+    hass: HomeAssistant, coordinator_climate, swing_status, expected_mode
+):
+    """Scheduled polling still maps Coanda after a command publishes new data."""
+    coordinator = coordinator_climate.coordinator
+    command_response = {
+        "port1": {"power": 1, "mode": 3, "v_swing": 0, "coanda": 0}
+    }
+    polled_status = {"port1": {"power": 1, "mode": 7, **swing_status}}
+    coordinator._update_method.return_value = polled_status
+    with patch(
+        "custom_components.daikin_br.climate.async_send_operation_data",
+        new=AsyncMock(return_value=command_response),
+    ):
+        await coordinator_climate.async_set_swing_mode(SWING_OFF)
+
+    assert coordinator_climate.swing_mode == SWING_OFF
+    coordinator_climate.async_write_ha_state.reset_mock()
+    async_fire_time_changed(
+        hass, dt_util.utcnow() + timedelta(seconds=POLL_INTERVAL + 1)
+    )
+    await hass.async_block_till_done()
+
+    coordinator._update_method.assert_awaited_once()
+    assert coordinator.data is polled_status
+    assert coordinator_climate.swing_mode == expected_mode
+    assert coordinator_climate.hvac_mode == HVACMode.AUTO
+    assert coordinator_climate.async_write_ha_state.call_count == 2

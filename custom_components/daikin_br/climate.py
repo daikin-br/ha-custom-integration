@@ -453,43 +453,16 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
             )
             _LOGGER.debug("send command response: %s", response)
 
-            # Update internal state based on the response
-            port_status = response.get("port1", {})
-            self._power_state = port_status.get("power")
-            mode_value = port_status.get("mode")
-            # Fix: auto mode fix for HVAC state sync. Date: 22-Jun-2025
-            # Fix: HVAC state sync for AC models that may return 7 for Auto. Date: 23-Oct-2026
-            mode_value = 1 if mode_value in (0, 7) else mode_value
-            self._hvac_mode = (
-                map_hvac_mode(mode_value) if self._power_state else HVACMode.OFF
-            )
-            self._target_temperature = validate_temperature(
-                port_status.get("temperature")
-            )
-            self._current_temperature = port_status.get("sensors", {}).get("room_temp")
-            self._fan_mode = map_fan_speed(port_status.get("fan"))
-            # Update swing state
-            self._attr_swing_mode = map_swing_mode(port_status)
+            # Only publish a usable status; the coordinator listener maps it.
+            if (
+                not isinstance(response, dict)
+                or not isinstance(response.get("port1"), dict)
+                or not response["port1"]
+            ):
+                raise InvalidDataException()
 
-            # Update the presets state
-            v_econo_value = port_status.get("econo", 0)
-            v_powerchill_value = port_status.get("powerchill", 0)
-            if v_econo_value == 1:
-                self._attr_preset_mode = PRESET_ECO
-
-            if v_powerchill_value == 1:
-                self._attr_preset_mode = PRESET_BOOST
-
-            if v_econo_value == 0 and v_powerchill_value == 0:
-                self._attr_preset_mode = PRESET_NONE
-
+            self.coordinator.async_set_updated_data(response)
             _LOGGER.debug("Preset mode set to : %s", self._attr_preset_mode)
-
-            # Update other properties if needed
-            self.async_write_ha_state()
-
-            # Skip update as we already know the new state
-            self._skip_update = True
 
         except (InvalidDataException, CommunicationErrorException) as e:
             _LOGGER.error("Error executing command %s: %s", self._unique_id, e)
