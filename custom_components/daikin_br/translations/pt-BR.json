@@ -59,6 +59,11 @@
               "eco": "Econo",
               "boost": "Potente"
             }
+          },
+          "swing_mode": {
+            "state": {
+              "coanda": "Conforto"
+            }
           }
         }
       }

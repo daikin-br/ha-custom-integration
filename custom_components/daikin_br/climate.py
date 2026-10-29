@@ -41,6 +41,10 @@ _LOGGER = logging.getLogger(__name__)
 # Coordinator is used to centralize the data updates
 PARALLEL_UPDATES = 0
 
+# Custom swing mode for the Coanda airflow. The device keeps it in its own
+# "coanda" field and turns vertical swing off while it is enabled.
+SWING_COANDA = "coanda"
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -55,6 +59,15 @@ async def async_setup_entry(
 
     # Refresh after setup
     await climate_entity.coordinator.async_request_refresh()
+
+
+def map_swing_mode(port_status: dict[str, Any]) -> str:
+    """Return the swing mode for the given device status."""
+    if port_status.get("coanda", 0) == 1:
+        return SWING_COANDA
+    if port_status.get("v_swing", 0) == 1:
+        return SWING_VERTICAL
+    return SWING_OFF
 
 
 # class DaikinClimate(ClimateEntity):
@@ -119,6 +132,10 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         self._attr_preset_modes = [PRESET_NONE, PRESET_ECO, PRESET_BOOST]
         self._attr_preset_mode = PRESET_NONE
         self._attr_swing_modes = [SWING_OFF, SWING_VERTICAL]
+        # Only models that report the Coanda field support it.
+        self._supports_coanda = "coanda" in self.coordinator.data.get("port1", {})
+        if self._supports_coanda:
+            self._attr_swing_modes.append(SWING_COANDA)
         self._attr_swing_mode = SWING_OFF
         # Flag to skip updates
         self._skip_update = False
@@ -393,16 +410,13 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
             _LOGGER.error("Unsupported swing mode: %s", swing_mode)
             return
 
-        v_swing_value = None
-
-        # Map the swing mode to the device-specific value
-        if swing_mode == SWING_VERTICAL:  # "vertical":
-            v_swing_value = 1
-        elif swing_mode == SWING_OFF:  # "none":
-            v_swing_value = 0
+        # Map the swing mode to the device-specific values
+        swing_values = {"v_swing": 1 if swing_mode == SWING_VERTICAL else 0}
+        if self._supports_coanda:
+            swing_values["coanda"] = 1 if swing_mode == SWING_COANDA else 0
 
         # Prepare the payload
-        data = prepare_device_payload(v_swing=v_swing_value)
+        data = prepare_device_payload(**swing_values)
 
         # Serialize the payload to JSON
         json_data = json.dumps(data)
@@ -454,9 +468,8 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
             )
             self._current_temperature = port_status.get("sensors", {}).get("room_temp")
             self._fan_mode = map_fan_speed(port_status.get("fan"))
-            # Update vertical swing state
-            v_swing_value = port_status.get("v_swing", 0)  # Default to 0 if not present
-            self._attr_swing_mode = SWING_VERTICAL if v_swing_value == 1 else SWING_OFF
+            # Update swing state
+            self._attr_swing_mode = map_swing_mode(port_status)
 
             # Update the presets state
             v_econo_value = port_status.get("econo", 0)
@@ -506,9 +519,8 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         # Update fan mode
         self._fan_mode = map_fan_speed(port_status.get("fan"))
 
-        # Update vertical swing state
-        v_swing_value = port_status.get("v_swing", 0)  # Default to 0 if not present
-        self._attr_swing_mode = SWING_VERTICAL if v_swing_value == 1 else SWING_OFF
+        # Update swing state
+        self._attr_swing_mode = map_swing_mode(port_status)
 
         # Update preset mode based on economy and power chill settings
         v_econo_value = port_status.get("econo", 0)
