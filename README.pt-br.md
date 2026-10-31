@@ -78,14 +78,30 @@ Se isso se aplicar à sua configuração, ajuste as configurações do seu firew
 
 A plataforma de climatização `daikin_br` integra os sistemas de ar-condicionado Daikin com o Home Assistant, permitindo o controle dos seguintes parâmetros:
 
-- [**Modo HVAC**](https://www.home-assistant.io/integrations/climate/#action-climateset_hvac_mode) (`off`, `heat`, `cool`, `dry`, `fan_only`)
-- [**Temperatura Alvo**](https://www.home-assistant.io/integrations/climate#action-climateset_temperature)
+- [**Modo HVAC**](https://www.home-assistant.io/integrations/climate/#action-climateset_hvac_mode) (`off`, `heat`, `cool`, `dry`, `fan_only`, `auto`). O modo `heat` fica oculto em aparelhos somente frio.
+- [**Temperatura Alvo**](https://www.home-assistant.io/integrations/climate#action-climateset_temperature). A faixa acompanha o modo atual: 18-32°C em `cool`, 10-30°C em `heat` e 18-30°C em `auto`.
 - [**Ligar/Desligar**](https://www.home-assistant.io/integrations/climate#action-climateturn_on)
 - [**Modo Ventilador**](https://www.home-assistant.io/integrations/climate#action-climateset_fan_mode) (velocidade do ventilador)
 - [**Modo Oscilação**](https://www.home-assistant.io/integrations/climate#action-climateset_swing_mode) (`off`, `vertical`, `coanda`; `coanda` só aparece nos dispositivos que suportam essa função)
-- [**Modo Predefinido**](https://www.home-assistant.io/integrations/climate#action-climateset_preset_mode) (eco, boost)
+- [**Modo Predefinido**](https://www.home-assistant.io/integrations/climate#action-climateset_preset_mode) (`none`, `eco` = Econo, `boost` = Power Chill)
 
 A temperatura ambiente atual também é exibida.
+
+O modo de oscilação é removido em aparelhos que informam não ter oscilação vertical. Se as capacidades não puderem ser lidas, a integração carrega normalmente com todas as opções.
+
+## Entidades opcionais
+
+A entidade de clima continua sendo a forma principal de controlar o ar-condicionado. Para dashboards personalizados e automações, a integração também cria as entidades abaixo. Elas começam **desativadas**; ative as que precisar em **Configurações -> Dispositivos e serviços -> Daikin Smart AC -> Entidades**.
+
+| Entidade | Tipo | Equivale a |
+| --- | --- | --- |
+| Ligado | Interruptor | Ligar/desligar do clima |
+| Modo potente | Interruptor | Predefinição `boost` |
+| Modo econômico | Interruptor | Predefinição `eco` |
+| Oscilação vertical | Interruptor | Oscilação `vertical` (não é criada em aparelhos sem oscilação vertical) |
+| Velocidade | Seleção | Modo do ventilador, com as mesmas sete opções |
+
+Essas entidades ficam sincronizadas com a entidade de clima. Modo potente e Modo econômico não podem ficar ligados ao mesmo tempo: ligar um desliga o outro.
 
 ## Atualizações de Dados
 
