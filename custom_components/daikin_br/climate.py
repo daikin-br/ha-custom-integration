@@ -32,6 +32,7 @@ from homeassistant.const import ATTR_TEMPERATURE, CONF_API_KEY, UnitOfTemperatur
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .const import FAN_MODES
 from .coordinator import DaikinConfigEntry
 from .entity import DaikinEntity
 
@@ -44,6 +45,39 @@ PARALLEL_UPDATES = 0
 # Custom swing mode for the Coanda airflow. The device keeps it in its own
 # "coanda" field and turns vertical swing off while it is enabled.
 SWING_COANDA = "coanda"
+
+# Target temperature limits (°C) the device accepts in each mode.
+TEMPERATURE_RANGES = {
+    HVACMode.COOL: (18.0, 32.0),
+    HVACMode.HEAT: (10.0, 30.0),
+    HVACMode.AUTO: (18.0, 30.0),
+}
+
+# Device fields behind each preset.
+PRESET_FIELDS = {
+    PRESET_NONE: {"powerchill": 0, "econo": 0},
+    PRESET_ECO: {"powerchill": 0, "econo": 1},
+    PRESET_BOOST: {"powerchill": 1, "econo": 0},
+}
+
+
+def _preset_changes(current: str | None, target: str) -> dict[str, int]:
+    """Return only the preset fields that differ from the current preset.
+
+    Firmware before p1.0.4.2 turns the indoor unit LED back on whenever a
+    command carries the powerchill field, so it is sent only when it changes.
+    """
+    target_fields = PRESET_FIELDS[target]
+    current_fields = PRESET_FIELDS.get(current or PRESET_NONE)
+    if current_fields is None:
+        return dict(target_fields)
+    changes = {
+        field: value
+        for field, value in target_fields.items()
+        if current_fields[field] != value
+    }
+    # Re-selecting the current preset still sends one field to resync the device.
+    return changes or {"econo": target_fields["econo"]}
 
 
 async def async_setup_entry(
@@ -118,16 +152,8 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
             | ClimateEntityFeature.TURN_OFF
         )
 
-        # Define fan modes here, this could depend on the device's capabilities
-        self._fan_modes = [
-            "auto",
-            "high",
-            "medium_high",
-            "medium",
-            "low_medium",
-            "low",
-            "quiet",
-        ]
+        # Fan modes are shared with the fan speed select.
+        self._fan_modes = list(FAN_MODES)
         self._fan_mode = "auto"  # Default fan mode
         self._attr_preset_modes = [PRESET_NONE, PRESET_ECO, PRESET_BOOST]
         self._attr_preset_mode = PRESET_NONE
@@ -137,6 +163,11 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         if self._supports_coanda:
             self._attr_swing_modes.append(SWING_COANDA)
         self._attr_swing_mode = SWING_OFF
+        # Units reporting v_sw=0 have no vertical swing: same rule as the switch.
+        if self.coordinator.capabilities.get("v_sw") == 0:
+            self._attr_swing_modes.remove(SWING_VERTICAL)
+            if self._attr_swing_modes == [SWING_OFF]:
+                self._attr_supported_features &= ~ClimateEntityFeature.SWING_MODE
         # Flag to skip updates
         self._skip_update = False
 
@@ -164,7 +195,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def hvac_modes(self) -> list[HVACMode]:
         """Return the list of supported HVAC modes."""
-        return [
+        modes = [
             HVACMode.OFF,
             HVACMode.FAN_ONLY,
             HVACMode.COOL,
@@ -172,6 +203,10 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
             HVACMode.HEAT,
             HVACMode.AUTO,
         ]
+        # Cooling-only units report heat=0 in their capability flags.
+        if self.coordinator.capabilities.get("heat") == 0:
+            modes.remove(HVACMode.HEAT)
+        return modes
 
     @property
     def hvac_mode(self) -> HVACMode:
@@ -230,13 +265,22 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
 
     @property
     def min_temp(self) -> float:
-        """Return the minimum temperature."""
-        return 10.0  # Set to the device's minimum temperature
+        """Return the minimum temperature for the current mode."""
+        return self._temperature_range()[0]
 
     @property
     def max_temp(self) -> float:
-        """Return the maximum temperature."""
-        return 32.0  # Set to the device's maximum temperature
+        """Return the maximum temperature for the current mode."""
+        return self._temperature_range()[1]
+
+    def _temperature_range(self) -> tuple[float, float]:
+        """Return the (min, max) target temperature accepted in the current mode."""
+        if self._hvac_mode in TEMPERATURE_RANGES:
+            return TEMPERATURE_RANGES[self._hvac_mode]
+        # Modes without a target temperature: span every mode the unit supports.
+        if self.coordinator.capabilities.get("heat") == 0:
+            return TEMPERATURE_RANGES[HVACMode.COOL]
+        return (10.0, 32.0)
 
     @property
     def target_temperature_step(self) -> float:
@@ -322,25 +366,13 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
             return
 
         # Check HVAC mode and apply temperature range or restrictions
-        if self._hvac_mode == HVACMode.COOL:
-            if temperature < 18 or temperature > 32:
-                message = f"Temperature {temperature}°C is out of range for COOL mode (18-32°C)."
-                _LOGGER.error("Entity %s: %s", self.entity_id, message)
-                # Revert the temperature dial to the previous value
-                self._target_temperature = temperature
-                self.async_write_ha_state()
-                return
-        elif self._hvac_mode == HVACMode.HEAT:
-            if temperature < 10 or temperature > 30:
-                message = f"Temperature {temperature}°C is out of range for HEAT mode (10-30°C)."
-                _LOGGER.error("Entity %s: %s", self.entity_id, message)
-                # Revert the temperature dial to the previous value
-                self._target_temperature = temperature
-                self.async_write_ha_state()
-                return
-        elif self._hvac_mode == HVACMode.AUTO:
-            if temperature < 18 or temperature > 30:
-                message = f"Temperature {temperature}°C is out of range for AUTO mode (18-30°C)."
+        if self._hvac_mode in TEMPERATURE_RANGES:
+            low, high = TEMPERATURE_RANGES[self._hvac_mode]
+            if temperature < low or temperature > high:
+                message = (
+                    f"Temperature {temperature}°C is out of range for "
+                    f"{self._hvac_mode.upper()} mode ({low:g}-{high:g}°C)."
+                )
                 _LOGGER.error("Entity %s: %s", self.entity_id, message)
                 # Revert the temperature dial to the previous value
                 self._target_temperature = temperature
@@ -367,20 +399,11 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         """Set the preset mode only if device is on (power_state = 1)."""
         data = None
         if self._power_state == 1:  # Check if the device is ON
-            if preset_mode == PRESET_ECO:
-                # Prepare the payload for the device
-                data = prepare_device_payload(powerchill=0, econo=1)
-                self._attr_preset_mode = PRESET_ECO
-                self.schedule_update_ha_state()
-            elif preset_mode == PRESET_BOOST:
-                # Prepare the payload for the device
-                data = prepare_device_payload(powerchill=1, econo=0)
-                self._attr_preset_mode = PRESET_BOOST
-                self.schedule_update_ha_state()
-            elif preset_mode == PRESET_NONE:
-                # Prepare the payload for the device
-                data = prepare_device_payload(powerchill=0, econo=0)
-                self._attr_preset_mode = PRESET_NONE
+            if preset_mode in PRESET_FIELDS:
+                data = prepare_device_payload(
+                    **_preset_changes(self._attr_preset_mode, preset_mode)
+                )
+                self._attr_preset_mode = preset_mode
                 self.schedule_update_ha_state()
         else:
             # Send a persistent notification when the device is off

@@ -179,7 +179,9 @@ async def test_async_setup_entry_success(hass: HomeAssistant, dummy_config_entry
         with (
             patch(
                 "custom_components.daikin_br.async_get_thing_info",
-                new=AsyncMock(return_value={"port1": {"fw_ver": "1.0.0"}}),
+                new=AsyncMock(
+                    side_effect=[{"port1": {"fw_ver": "1.0.0"}}, {"heat": 0, "v_sw": 1}]
+                ),
             ) as mock_get_info,
             patch.object(
                 DaikinDataUpdateCoordinator,
@@ -200,7 +202,8 @@ async def test_async_setup_entry_success(hass: HomeAssistant, dummy_config_entry
     assert entry.runtime_data is not None
     assert isinstance(entry.runtime_data, DaikinDataUpdateCoordinator)
 
-    mock_get_info.assert_awaited_once()
+    assert [c.args[2] for c in mock_get_info.await_args_list] == ["acstatus", "device"]
+    assert entry.runtime_data.capabilities == {"heat": 0, "v_sw": 1}
     mock_refresh.assert_awaited_once()
     mock_forward.assert_awaited_once_with(entry, PLATFORMS)
 

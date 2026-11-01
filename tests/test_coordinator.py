@@ -1,13 +1,16 @@
 """Tests for the Daikin BR coordinator."""
 
 import datetime
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
+from pyiotdevice import InvalidDataException
 import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.daikin_br.coordinator import DaikinDataUpdateCoordinator
 from homeassistant.const import CONF_API_KEY
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 
@@ -189,3 +192,61 @@ async def test_async_update_data_exception(dummy_hass, dummy_config_entry) -> No
     assert "The device TEST_APN is unavailable: Test exception" in str(exc_info.value)
     # Check that a debug message is logged indicating an error.
     # assert "Error fetching data for TEST_APN:" in caplog.text
+
+
+def _command_coordinator(hass: HomeAssistant) -> DaikinDataUpdateCoordinator:
+    """Create a coordinator bound to a config entry for command tests."""
+    entry = MockConfigEntry(
+        domain="daikin_br",
+        data={
+            CONF_API_KEY: "VALID_KEY",
+            "device_apn": "TEST_APN",
+            "host": "192.168.1.100",
+            "command_suffix": "BZ",
+        },
+    )
+    return DaikinDataUpdateCoordinator(
+        hass,
+        entry,
+        device_apn="TEST_APN",
+        update_method=AsyncMock(),
+        update_interval=datetime.timedelta(seconds=10),
+    )
+
+
+@pytest.mark.asyncio
+async def test_send_command_publishes_response(hass: HomeAssistant):
+    """The state returned by the device becomes the coordinator data."""
+    coordinator = _command_coordinator(hass)
+    response = {"port1": {"power": 1, "econo": 1}}
+    with patch(
+        "custom_components.daikin_br.coordinator.async_send_operation_data",
+        new=AsyncMock(return_value=response),
+    ) as mock_send:
+        await coordinator.async_send_command(econo=1)
+
+    mock_send.assert_awaited_once_with(
+        "192.168.1.100", "VALID_KEY", '{"port1": {"econo": 1}}', "BZ"
+    )
+    assert coordinator.data == response
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "send_mock",
+    [
+        AsyncMock(return_value=None),
+        AsyncMock(side_effect=InvalidDataException()),
+    ],
+)
+async def test_send_command_rejected(hass: HomeAssistant, send_mock):
+    """A rejected or failed command raises HomeAssistantError."""
+    coordinator = _command_coordinator(hass)
+    with (
+        patch(
+            "custom_components.daikin_br.coordinator.async_send_operation_data",
+            new=send_mock,
+        ),
+        pytest.raises(HomeAssistantError),
+    ):
+        await coordinator.async_send_command(econo=0)
