@@ -49,13 +49,18 @@
         "state_attributes": {
           "fan_mode": {
             "state": {
-              "medium_high": "Médio Alto",
-              "low_medium": "Baixo Médio",
-              "quiet": "Silencioso"
+              "auto": "Automático",
+              "quiet": "Silencioso",
+              "low": "Baixo",
+              "low_medium": "Médio baixo",
+              "medium": "Médio",
+              "medium_high": "Médio alto",
+              "high": "Alto"
             }
           },
           "preset_mode": {
             "state": {
+              "none": "Normal",
               "eco": "Econo",
               "boost": "Potente"
             }
@@ -66,6 +71,34 @@
             }
           }
         }
+      }
+    },
+    "select": {
+      "fan_speed": {
+        "name": "Velocidade",
+        "state": {
+          "auto": "Automático",
+          "quiet": "Silencioso",
+          "low": "Baixo",
+          "low_medium": "Médio baixo",
+          "medium": "Médio",
+          "medium_high": "Médio alto",
+          "high": "Alto"
+        }
+      }
+    },
+    "switch": {
+      "power": {
+        "name": "Ligado"
+      },
+      "powerchill": {
+        "name": "Modo potente"
+      },
+      "econo": {
+        "name": "Modo econômico"
+      },
+      "v_swing": {
+        "name": "Oscilação vertical"
       }
     }
   }

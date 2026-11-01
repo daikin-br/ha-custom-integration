@@ -379,21 +379,22 @@ async def test_async_set_preset_mode(
     # Simulate device is ON by setting the internal _power_state.
     monkeypatch.setattr(climate_entity, "_power_state", 1)
 
+    # Commands assert the requested preset; only device responses change state.
     # Test preset ECO.
-    expected_json_eco = json.dumps({"port1": {"powerchill": 0, "econo": 1}})
+    expected_json_eco = json.dumps({"port1": {"econo": 1}})
     await climate_entity.async_set_preset_mode(PRESET_ECO)
     # Use the public property to verify the preset mode.
-    assert climate_entity.preset_mode == PRESET_ECO
-    climate_entity.schedule_update_ha_state.assert_called_once()
+    assert climate_entity.preset_mode == PRESET_NONE
+    climate_entity.schedule_update_ha_state.assert_not_called()
     climate_entity.set_thing_state.assert_awaited_once_with(expected_json_eco)
     climate_entity.schedule_update_ha_state.reset_mock()
     climate_entity.set_thing_state.reset_mock()
 
     # Test preset BOOST.
-    expected_json_boost = json.dumps({"port1": {"powerchill": 1, "econo": 0}})
+    expected_json_boost = json.dumps({"port1": {"powerchill": 1}})
     await climate_entity.async_set_preset_mode(PRESET_BOOST)
-    assert climate_entity.preset_mode == PRESET_BOOST
-    climate_entity.schedule_update_ha_state.assert_called_once()
+    assert climate_entity.preset_mode == PRESET_NONE
+    climate_entity.schedule_update_ha_state.assert_not_called()
     climate_entity.set_thing_state.assert_awaited_once_with(expected_json_boost)
     climate_entity.schedule_update_ha_state.reset_mock()
     climate_entity.set_thing_state.reset_mock()
@@ -402,8 +403,16 @@ async def test_async_set_preset_mode(
     expected_json_none = json.dumps({"port1": {"powerchill": 0, "econo": 0}})
     await climate_entity.async_set_preset_mode(PRESET_NONE)
     assert climate_entity.preset_mode == PRESET_NONE
-    climate_entity.schedule_update_ha_state.assert_called_once()
+    climate_entity.schedule_update_ha_state.assert_not_called()
     climate_entity.set_thing_state.assert_awaited_once_with(expected_json_none)
+    climate_entity.schedule_update_ha_state.reset_mock()
+    climate_entity.set_thing_state.reset_mock()
+
+    # Re-selecting None clears both fields even if the cached state is stale.
+    await climate_entity.async_set_preset_mode(PRESET_NONE)
+    climate_entity.set_thing_state.assert_awaited_once_with(
+        json.dumps({"port1": {"powerchill": 0, "econo": 0}})
+    )
     climate_entity.schedule_update_ha_state.reset_mock()
     climate_entity.set_thing_state.reset_mock()
 
@@ -1493,3 +1502,36 @@ async def test_periodic_poll_coanda_after_command(
     assert coordinator_climate.swing_mode == expected_mode
     assert coordinator_climate.hvac_mode == HVACMode.AUTO
     assert coordinator_climate.async_write_ha_state.call_count == 2
+
+
+def test_hvac_modes_follow_capabilities(mock_config_entry) -> None:
+    """Heat mode is hidden on units whose capabilities report heat=0."""
+    climate_entity = DaikinClimate(mock_config_entry)
+
+    mock_config_entry.runtime_data.capabilities = {}
+    assert HVACMode.HEAT in climate_entity.hvac_modes
+
+    mock_config_entry.runtime_data.capabilities = {"heat": 0, "v_sw": 1}
+    assert HVACMode.HEAT not in climate_entity.hvac_modes
+    assert HVACMode.COOL in climate_entity.hvac_modes
+
+
+def test_temperature_range_follows_mode(
+    monkeypatch: pytest.MonkeyPatch, mock_config_entry
+) -> None:
+    """The dial limits match what the device accepts in each mode."""
+    climate_entity = DaikinClimate(mock_config_entry)
+
+    expected = {
+        HVACMode.COOL: (18.0, 32.0),
+        HVACMode.HEAT: (10.0, 30.0),
+        HVACMode.AUTO: (18.0, 30.0),
+    }
+    for mode, limits in expected.items():
+        monkeypatch.setattr(climate_entity, "_hvac_mode", mode)
+        assert (climate_entity.min_temp, climate_entity.max_temp) == limits
+
+    # Without a target temperature, a cooling-only unit never goes below 18°C.
+    monkeypatch.setattr(climate_entity, "_hvac_mode", HVACMode.FAN_ONLY)
+    mock_config_entry.runtime_data.capabilities = {"heat": 0}
+    assert (climate_entity.min_temp, climate_entity.max_temp) == (18.0, 32.0)
