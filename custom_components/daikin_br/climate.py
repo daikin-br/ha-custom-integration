@@ -53,31 +53,18 @@ TEMPERATURE_RANGES = {
     HVACMode.AUTO: (18.0, 30.0),
 }
 
-# Device fields behind each preset.
+# Enabling either preset lets firmware clear the other; None must clear both
+# because the cached preset can lag behind remote changes or failed commands.
 PRESET_FIELDS = {
     PRESET_NONE: {"powerchill": 0, "econo": 0},
-    PRESET_ECO: {"powerchill": 0, "econo": 1},
-    PRESET_BOOST: {"powerchill": 1, "econo": 0},
+    PRESET_ECO: {"econo": 1},
+    PRESET_BOOST: {"powerchill": 1},
 }
 
 
-def _preset_changes(current: str | None, target: str) -> dict[str, int]:
-    """Return only the preset fields that differ from the current preset.
-
-    Firmware before p1.0.4.2 turns the indoor unit LED back on whenever a
-    command carries the powerchill field, so it is sent only when it changes.
-    """
-    target_fields = PRESET_FIELDS[target]
-    current_fields = PRESET_FIELDS.get(current or PRESET_NONE)
-    if current_fields is None:
-        return dict(target_fields)
-    changes = {
-        field: value
-        for field, value in target_fields.items()
-        if current_fields[field] != value
-    }
-    # Re-selecting the current preset still sends one field to resync the device.
-    return changes or {"econo": target_fields["econo"]}
+def _preset_changes(target: str) -> dict[str, int]:
+    """Return an explicit preset command independent of cached device state."""
+    return dict(PRESET_FIELDS[target])
 
 
 async def async_setup_entry(
@@ -400,11 +387,7 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
         data = None
         if self._power_state == 1:  # Check if the device is ON
             if preset_mode in PRESET_FIELDS:
-                data = prepare_device_payload(
-                    **_preset_changes(self._attr_preset_mode, preset_mode)
-                )
-                self._attr_preset_mode = preset_mode
-                self.schedule_update_ha_state()
+                data = prepare_device_payload(**_preset_changes(preset_mode))
         else:
             # Send a persistent notification when the device is off
             message = (

@@ -379,39 +379,39 @@ async def test_async_set_preset_mode(
     # Simulate device is ON by setting the internal _power_state.
     monkeypatch.setattr(climate_entity, "_power_state", 1)
 
-    # Only the fields that change are sent, starting from PRESET_NONE.
+    # Commands assert the requested preset; only device responses change state.
     # Test preset ECO.
     expected_json_eco = json.dumps({"port1": {"econo": 1}})
     await climate_entity.async_set_preset_mode(PRESET_ECO)
     # Use the public property to verify the preset mode.
-    assert climate_entity.preset_mode == PRESET_ECO
-    climate_entity.schedule_update_ha_state.assert_called_once()
+    assert climate_entity.preset_mode == PRESET_NONE
+    climate_entity.schedule_update_ha_state.assert_not_called()
     climate_entity.set_thing_state.assert_awaited_once_with(expected_json_eco)
     climate_entity.schedule_update_ha_state.reset_mock()
     climate_entity.set_thing_state.reset_mock()
 
     # Test preset BOOST.
-    expected_json_boost = json.dumps({"port1": {"powerchill": 1, "econo": 0}})
+    expected_json_boost = json.dumps({"port1": {"powerchill": 1}})
     await climate_entity.async_set_preset_mode(PRESET_BOOST)
-    assert climate_entity.preset_mode == PRESET_BOOST
-    climate_entity.schedule_update_ha_state.assert_called_once()
+    assert climate_entity.preset_mode == PRESET_NONE
+    climate_entity.schedule_update_ha_state.assert_not_called()
     climate_entity.set_thing_state.assert_awaited_once_with(expected_json_boost)
     climate_entity.schedule_update_ha_state.reset_mock()
     climate_entity.set_thing_state.reset_mock()
 
     # Test preset NONE.
-    expected_json_none = json.dumps({"port1": {"powerchill": 0}})
+    expected_json_none = json.dumps({"port1": {"powerchill": 0, "econo": 0}})
     await climate_entity.async_set_preset_mode(PRESET_NONE)
     assert climate_entity.preset_mode == PRESET_NONE
-    climate_entity.schedule_update_ha_state.assert_called_once()
+    climate_entity.schedule_update_ha_state.assert_not_called()
     climate_entity.set_thing_state.assert_awaited_once_with(expected_json_none)
     climate_entity.schedule_update_ha_state.reset_mock()
     climate_entity.set_thing_state.reset_mock()
 
-    # Re-selecting the current preset sends econo only, never powerchill.
+    # Re-selecting None clears both fields even if the cached state is stale.
     await climate_entity.async_set_preset_mode(PRESET_NONE)
     climate_entity.set_thing_state.assert_awaited_once_with(
-        json.dumps({"port1": {"econo": 0}})
+        json.dumps({"port1": {"powerchill": 0, "econo": 0}})
     )
     climate_entity.schedule_update_ha_state.reset_mock()
     climate_entity.set_thing_state.reset_mock()

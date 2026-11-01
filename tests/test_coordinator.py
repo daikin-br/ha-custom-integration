@@ -250,3 +250,49 @@ async def test_send_command_rejected(hass: HomeAssistant, send_mock):
         pytest.raises(HomeAssistantError),
     ):
         await coordinator.async_send_command(econo=0)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response",
+    [
+        None,
+        False,
+        "invalid",
+        [],
+        {},
+        {"port1": None},
+        {"port1": {}},
+        {"port1": []},
+        {"port1": [1]},
+        {"port1": "invalid"},
+        {"port1": 1},
+        {"port1": True},
+    ],
+)
+async def test_send_command_invalid_response_preserves_state(
+    hass: HomeAssistant, response
+):
+    """Malformed responses cannot replace confirmed data or notify listeners."""
+    coordinator = _command_coordinator(hass)
+    previous_data = {"port1": {"power": 1, "econo": 0}}
+    coordinator.data = previous_data
+    coordinator.last_update_success = False
+    listener = MagicMock()
+    remove_listener = coordinator.async_add_listener(listener)
+    try:
+        with (
+            patch(
+                "custom_components.daikin_br.coordinator.async_send_operation_data",
+                new=AsyncMock(return_value=response),
+            ),
+            pytest.raises(HomeAssistantError),
+        ):
+            await coordinator.async_send_command(econo=1)
+
+        assert coordinator.data is previous_data
+        assert coordinator.last_update_success is False
+        listener.assert_not_called()
+    finally:
+        remove_listener()
+        await coordinator.async_shutdown()

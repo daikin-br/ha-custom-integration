@@ -1,8 +1,9 @@
 """End-to-end tests of the climate, switch and select entities sharing one device."""
 
 import json
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
+from pyiotdevice import InvalidDataException
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -181,11 +182,11 @@ async def test_climate_presets_sync_switches(hass: HomeAssistant, device) -> Non
 
     steps = [
         (PRESET_ECO, {"econo": 1}, "on", "off"),
-        (PRESET_BOOST, {"powerchill": 1, "econo": 0}, "off", "on"),
-        (PRESET_ECO, {"powerchill": 0, "econo": 1}, "on", "off"),
-        (PRESET_NONE, {"econo": 0}, "off", "off"),
         (PRESET_BOOST, {"powerchill": 1}, "off", "on"),
-        (PRESET_NONE, {"powerchill": 0}, "off", "off"),
+        (PRESET_ECO, {"econo": 1}, "on", "off"),
+        (PRESET_NONE, {"powerchill": 0, "econo": 0}, "off", "off"),
+        (PRESET_BOOST, {"powerchill": 1}, "off", "on"),
+        (PRESET_NONE, {"powerchill": 0, "econo": 0}, "off", "off"),
     ]
     for preset, sent, econo_state, powerchill_state in steps:
         await hass.services.async_call(
@@ -354,3 +355,111 @@ async def test_no_vertical_swing_keeps_coanda(hass: HomeAssistant, device) -> No
     state = hass.states.get(_entity_id(hass, "climate", APN))
     assert state.attributes[ATTR_SUPPORTED_FEATURES] & ClimateEntityFeature.SWING_MODE
     assert state.attributes["swing_modes"] == ["off", "coanda"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("cached_preset", "actual_preset"),
+    [
+        (PRESET_NONE, PRESET_BOOST),
+        (PRESET_BOOST, PRESET_NONE),
+        (PRESET_ECO, PRESET_BOOST),
+    ],
+)
+@pytest.mark.parametrize(
+    ("target", "expected_command"),
+    [
+        (PRESET_ECO, {"econo": 1}),
+        (PRESET_BOOST, {"powerchill": 1}),
+        (PRESET_NONE, {"powerchill": 0, "econo": 0}),
+    ],
+)
+async def test_climate_preset_with_stale_state(
+    hass: HomeAssistant, device, cached_preset, actual_preset, target, expected_command
+) -> None:
+    """A requested preset wins over stale cached state and syncs every entity."""
+    device.port.update(
+        econo=int(cached_preset == PRESET_ECO),
+        powerchill=int(cached_preset == PRESET_BOOST),
+    )
+    await _setup(hass, enable=ALL_EXTRAS)
+    climate = _entity_id(hass, "climate", APN)
+    assert hass.states.get(climate).attributes[ATTR_PRESET_MODE] == cached_preset
+
+    # A remote change has not reached the coordinator yet.
+    device.port.update(
+        econo=int(actual_preset == PRESET_ECO),
+        powerchill=int(actual_preset == PRESET_BOOST),
+    )
+    await hass.services.async_call(
+        "climate",
+        "set_preset_mode",
+        {ATTR_ENTITY_ID: climate, ATTR_PRESET_MODE: target},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert device.sent[-1] == expected_command
+    assert device.port["econo"] == int(target == PRESET_ECO)
+    assert device.port["powerchill"] == int(target == PRESET_BOOST)
+    assert hass.states.get(climate).attributes[ATTR_PRESET_MODE] == target
+    for key, preset in (("econo", PRESET_ECO), ("powerchill", PRESET_BOOST)):
+        entity_id = _entity_id(hass, "switch", f"{APN}_{key}")
+        assert hass.states.get(entity_id).state == ("on" if target == preset else "off")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [None, InvalidDataException()])
+@pytest.mark.parametrize(
+    ("target", "expected_command"),
+    [
+        (PRESET_ECO, {"econo": 1}),
+        (PRESET_BOOST, {"powerchill": 1}),
+        (PRESET_NONE, {"powerchill": 0, "econo": 0}),
+    ],
+)
+async def test_climate_preset_failure_then_retry(
+    hass: HomeAssistant, device, failure, target, expected_command
+) -> None:
+    """Failures preserve confirmed state and retries assert the intended preset."""
+    initial_preset = PRESET_BOOST if target == PRESET_NONE else PRESET_NONE
+    device.port["powerchill"] = int(initial_preset == PRESET_BOOST)
+    entry = await _setup(hass, enable=ALL_EXTRAS)
+    climate = _entity_id(hass, "climate", APN)
+    previous_data = entry.runtime_data.data
+    with patch(
+        "custom_components.daikin_br.climate.async_send_operation_data",
+        new=AsyncMock(return_value=None, side_effect=failure),
+    ) as failed_send:
+        await hass.services.async_call(
+            "climate",
+            "set_preset_mode",
+            {ATTR_ENTITY_ID: climate, ATTR_PRESET_MODE: target},
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+
+    assert json.loads(failed_send.await_args.args[2]) == {"port1": expected_command}
+    assert entry.runtime_data.data is previous_data
+    assert hass.states.get(climate).attributes[ATTR_PRESET_MODE] == initial_preset
+    for key, preset in (("econo", PRESET_ECO), ("powerchill", PRESET_BOOST)):
+        entity_id = _entity_id(hass, "switch", f"{APN}_{key}")
+        assert hass.states.get(entity_id).state == (
+            "on" if initial_preset == preset else "off"
+        )
+
+    await hass.services.async_call(
+        "climate",
+        "set_preset_mode",
+        {ATTR_ENTITY_ID: climate, ATTR_PRESET_MODE: target},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert device.sent[-1] == expected_command
+    assert device.port["econo"] == int(target == PRESET_ECO)
+    assert device.port["powerchill"] == int(target == PRESET_BOOST)
+    assert hass.states.get(climate).attributes[ATTR_PRESET_MODE] == target
+    for key, preset in (("econo", PRESET_ECO), ("powerchill", PRESET_BOOST)):
+        entity_id = _entity_id(hass, "switch", f"{APN}_{key}")
+        assert hass.states.get(entity_id).state == ("on" if target == preset else "off")

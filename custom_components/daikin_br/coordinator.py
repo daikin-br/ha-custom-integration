@@ -83,7 +83,11 @@ class DaikinDataUpdateCoordinator(DataUpdateCoordinator):
             raise HomeAssistantError(
                 f"Error sending command to {self.device_apn}: {e}"
             ) from e
-        if not isinstance(response, dict) or not response.get("port1"):
+        if (
+            not isinstance(response, dict)
+            or not isinstance(response.get("port1"), dict)
+            or not response["port1"]
+        ):
             raise HomeAssistantError(
                 f"The device {self.device_apn} did not accept the command {fields}"
             )
