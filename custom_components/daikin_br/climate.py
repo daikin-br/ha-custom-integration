@@ -182,7 +182,8 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
     @property
     def hvac_modes(self) -> list[HVACMode]:
         """Return the list of supported HVAC modes."""
-        modes = [
+        # Some units that can heat report heat=0 in /device.
+        return [
             HVACMode.OFF,
             HVACMode.FAN_ONLY,
             HVACMode.COOL,
@@ -190,10 +191,6 @@ class DaikinClimate(DaikinEntity, ClimateEntity):
             HVACMode.HEAT,
             HVACMode.AUTO,
         ]
-        # Cooling-only units report heat=0 in their capability flags.
-        if self.coordinator.capabilities.get("heat") == 0:
-            modes.remove(HVACMode.HEAT)
-        return modes
 
     @property
     def hvac_mode(self) -> HVACMode:

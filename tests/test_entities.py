@@ -11,6 +11,7 @@ from custom_components.daikin_br.const import DOMAIN, FAN_MODES
 from homeassistant.components.climate import (
     ATTR_FAN_MODE,
     ATTR_FAN_MODES,
+    ATTR_HVAC_MODE,
     ATTR_HVAC_MODES,
     ATTR_PRESET_MODE,
     ATTR_SWING_MODE,
@@ -329,13 +330,41 @@ async def test_capabilities_unavailable(
 
 
 @pytest.mark.asyncio
-async def test_capabilities_cooling_only_no_swing(hass: HomeAssistant, device) -> None:
-    """heat=0 hides Heat; v_sw=0 removes swing from the climate and the switch."""
+async def test_manual_hvac_mode_selection_with_heat_flag_zero(
+    hass: HomeAssistant, device
+) -> None:
+    """Heat remains selectable and the dial follows the confirmed mode."""
+    device.capabilities = {"heat": 0, "v_sw": 1}
+    await _setup(hass)
+    climate = _entity_id(hass, "climate", APN)
+
+    for mode, command_mode, limits in (
+        (HVACMode.HEAT, 4, (10.0, 30.0)),
+        (HVACMode.COOL, 3, (18.0, 32.0)),
+        (HVACMode.AUTO, 1, (18.0, 30.0)),
+    ):
+        await hass.services.async_call(
+            "climate",
+            "set_hvac_mode",
+            {ATTR_ENTITY_ID: climate, ATTR_HVAC_MODE: mode},
+            blocking=True,
+        )
+        await hass.async_block_till_done()
+
+        assert device.sent[-1] == {"mode": command_mode, "power": 1}
+        state = hass.states.get(climate)
+        assert state.state == mode
+        assert (state.attributes["min_temp"], state.attributes["max_temp"]) == limits
+
+
+@pytest.mark.asyncio
+async def test_capabilities_no_vertical_swing(hass: HomeAssistant, device) -> None:
+    """The vertical swing flag still controls the climate and switch."""
     device.capabilities = {"heat": 0, "v_sw": 0}
     await _setup(hass)
 
     state = hass.states.get(_entity_id(hass, "climate", APN))
-    assert HVACMode.HEAT not in state.attributes[ATTR_HVAC_MODES]
+    assert HVACMode.HEAT in state.attributes[ATTR_HVAC_MODES]
     assert not (
         state.attributes[ATTR_SUPPORTED_FEATURES] & ClimateEntityFeature.SWING_MODE
     )
