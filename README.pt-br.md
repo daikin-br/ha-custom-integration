@@ -78,7 +78,7 @@ Se isso se aplicar à sua configuração, ajuste as configurações do seu firew
 
 A plataforma de climatização `daikin_br` integra os sistemas de ar-condicionado Daikin com o Home Assistant, permitindo o controle dos seguintes parâmetros:
 
-- [**Modo HVAC**](https://www.home-assistant.io/integrations/climate/#action-climateset_hvac_mode) (`off`, `heat`, `cool`, `dry`, `fan_only`, `auto`). O modo `heat` fica oculto em aparelhos somente frio.
+- [**Modo HVAC**](https://www.home-assistant.io/integrations/climate/#action-climateset_hvac_mode) (`off`, `heat`, `cool`, `dry`, `fan_only`, `auto`). O modo `heat` sempre aparece, mas requer um aparelho com função de aquecimento.
 - [**Temperatura Alvo**](https://www.home-assistant.io/integrations/climate#action-climateset_temperature). A faixa acompanha o modo atual: 18-32°C em `cool`, 10-30°C em `heat` e 18-30°C em `auto`.
 - [**Ligar/Desligar**](https://www.home-assistant.io/integrations/climate#action-climateturn_on)
 - [**Modo Ventilador**](https://www.home-assistant.io/integrations/climate#action-climateset_fan_mode) (velocidade do ventilador)

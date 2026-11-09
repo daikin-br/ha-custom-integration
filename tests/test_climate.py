@@ -1504,16 +1504,19 @@ async def test_periodic_poll_coanda_after_command(
     assert coordinator_climate.async_write_ha_state.call_count == 2
 
 
-def test_hvac_modes_follow_capabilities(mock_config_entry) -> None:
-    """Heat mode is hidden on units whose capabilities report heat=0."""
+@pytest.mark.parametrize("capabilities", [{"heat": 0}, {"heat": 1}, {"v_sw": 1}])
+def test_hvac_modes_match_legacy_list(mock_config_entry, capabilities) -> None:
+    """The /device heat flag does not affect the v1.3.7 mode list."""
+    mock_config_entry.runtime_data.capabilities = capabilities
     climate_entity = DaikinClimate(mock_config_entry)
-
-    mock_config_entry.runtime_data.capabilities = {}
-    assert HVACMode.HEAT in climate_entity.hvac_modes
-
-    mock_config_entry.runtime_data.capabilities = {"heat": 0, "v_sw": 1}
-    assert HVACMode.HEAT not in climate_entity.hvac_modes
-    assert HVACMode.COOL in climate_entity.hvac_modes
+    assert climate_entity.hvac_modes == [
+        HVACMode.OFF,
+        HVACMode.FAN_ONLY,
+        HVACMode.COOL,
+        HVACMode.DRY,
+        HVACMode.HEAT,
+        HVACMode.AUTO,
+    ]
 
 
 def test_temperature_range_follows_mode(

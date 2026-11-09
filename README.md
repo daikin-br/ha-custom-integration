@@ -81,7 +81,7 @@ If this applies to your setup, adjust your firewall settings to allow access to 
 
 The `daikin_br` climate platform integrates Daikin air conditioning systems with Home Assistant, allowing control over the following parameters:
 
-- [**HVAC Mode**](https://www.home-assistant.io/integrations/climate/#action-climateset_hvac_mode) (`off`, `heat`, `cool`, `dry`, `fan_only`, `auto`). `heat` is hidden on cooling-only units.
+- [**HVAC Mode**](https://www.home-assistant.io/integrations/climate/#action-climateset_hvac_mode) (`off`, `heat`, `cool`, `dry`, `fan_only`, `auto`). `heat` is always listed, but requires a unit that supports heating.
 
 - [**Target Temperature**](https://www.home-assistant.io/integrations/climate#action-climateset_temperature). The range follows the current mode: 18-32°C in `cool`, 10-30°C in `heat` and 18-30°C in `auto`.
 
